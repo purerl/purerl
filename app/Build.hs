@@ -68,14 +68,7 @@ compile BuildOptions{..} = do
                              , "Usage: For basic information, try the `--help' option."
                              ]
     exitFailure
-  -- moduleFiles <- readUTF8FilesT input
   (makeErrors, makeWarnings) <- P.runMake P.defaultOptions $ do
-    -- forM_  externs $ \extern -> do
-    --   res <- P.readExternsFile extern 
-    --   case res of
-    --     Just f -> liftIO $ putStrLn $ "Got extern " <> extern <> ": " <> show (P.efModuleName f)
-    --     Nothing -> liftIO $ putStrLn $ "Error parsing externs: " <> extern
-
     modules <- forM corefn $ \corefn -> do
       let extern = replaceFileName corefn "externs.json"
       res <- readJSONFile corefn
@@ -85,7 +78,12 @@ compile BuildOptions{..} = do
           Just (_version, module') -> do
             foreignFile <- liftIO $ inferForeignModule $ CoreFn.modulePath module'
             case resExterns of
-              Just f -> pure $ Just (module', foreignFile, f)
+              Just f -> do
+                sourceTime <- max <$> P.getTimestamp corefn <*> P.getTimestamp extern
+                foreignTime <- case foreignFile of 
+                                Just ff -> max <$> P.getTimestamp ff <*> pure sourceTime
+                                Nothing -> pure sourceTime
+                pure $ Just (module', foreignFile, f, foreignTime)
               Nothing -> do
                 liftIO $ putStrLn $ "Error parsing externs: " <> extern
                 pure Nothing
@@ -96,18 +94,28 @@ compile BuildOptions{..} = do
           liftIO $ putStrLn $ "Error parsing corefn: " <> corefn
           pure Nothing
     let modules' = catMaybes modules
-        foreigns = M.fromList $ mapMaybe (\(m, fp, _) -> (CoreFn.moduleName m,) <$> fp) modules'
-        env = foldr P.applyExternsFileToEnvironment P.initEnvironment $ map (\(_, _, e) -> e) modules'
+        foreigns = M.fromList $ mapMaybe (\(m, fp, _, _) -> (CoreFn.moduleName m,) <$> fp) modules'
+        env = foldr P.applyExternsFileToEnvironment P.initEnvironment $ map (\(_, _, e, _) -> e) modules'
         buildActions = Make.buildActions buildOutputDir env foreigns True
 
-    forM_ modules' $ \(m, _, _) -> do
-      _ <- runSupplyT 0 $ Make.codegen buildActions m
-      Make.ffiCodegen buildActions m
+    forM_ modules' $ \(m, _, _, ts) -> do
+      shouldBuild <- needsBuild buildActions ts $ CoreFn.moduleName m
+      when shouldBuild $ do
+        _ <- runSupplyT 0 $ Make.codegen buildActions m
+        Make.ffiCodegen buildActions m
 
   -- printWarningsAndErrors (P.optionsVerboseErrors pscmOpts) pscmJSONErrors makeWarnings makeErrors
   exitSuccess
 
   where
+  needsBuild buildActions ts m = do
+    outputTs <- Make.getOutputTimestamp buildActions m
+    pure $ case outputTs of
+      Nothing -> True
+      Just outTs | outTs < ts -> True
+      _ -> False
+    
+
   inferForeignModule :: MonadIO m => FilePath -> m (Maybe FilePath)
   inferForeignModule path = do
     let jsFile = replaceExtension path "erl"

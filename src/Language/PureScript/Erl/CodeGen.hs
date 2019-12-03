@@ -111,7 +111,7 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
   types :: M.Map (Qualified Ident) SourceType
   types = M.map (\(t, _, _) -> t) $ E.names env
 
-  -- types of foreign imports which happen to have been exported :()
+  -- types of foreign imports which happen to have been exported :(
   foreignTypes :: [(Ident, SourceType)]
   foreignTypes = M.toList $ M.mapKeys disqualify $ M.filterWithKey (\(Qualified mn' x) _ -> mn' == Just mn && Set.member x f) types
     where
@@ -137,8 +137,12 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
   biconcat x = (concatMap fst x, concatMap snd x)
 
   arities :: M.Map (Qualified Ident) Int
-  arities = tyArity <$> types
+  arities = 
+    let inferredMaxArities = foldr findApps M.empty decls
+        typeArities = tyArity <$> types
+    in typeArities `M.union` inferredMaxArities
 
+  -- 're-export' foreign imports in the @ps module - also used for internal calls for non-exported foreign imports
   reExportForeign :: Ident -> m ([(Atom,Int)], [Erl])
   reExportForeign ident = do
     let arity = exportArity ident
@@ -223,6 +227,48 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
             then res
             else ([], snd res)
 
+  findApps :: Bind Ann -> M.Map (Qualified Ident) Int -> M.Map (Qualified Ident) Int
+  findApps (NonRec _ _ val) apps = findApps' val apps
+  findApps (Rec vals) apps = foldr findApps' apps $ map snd vals
+
+  findApps' :: Expr Ann -> M.Map (Qualified Ident) Int -> M.Map (Qualified Ident) Int
+  findApps' expr apps = case expr of
+    e@App{} ->
+      let (f, args) = unApp e []
+          apps' = foldr findApps' apps args
+      in
+      case f of
+        Var (_, _, _, Just IsNewtype) _ -> apps'
+        Var (_, _, _, Just (IsConstructor _ fields)) (Qualified _ _) | length args == length fields ->
+          apps'
+        Var (_, _, _, Just IsTypeClassConstructor) _ ->
+          apps'
+        Var _ qi@(Qualified (Just mn') _) | mn' == mn
+          -> M.alter (updateArity $ length args) qi apps'
+        _ -> findApps' f apps'
+    Accessor _ _ e -> findApps' e apps
+    ObjectUpdate _ e es -> findApps' e $ foldr findApps' apps $ map snd es
+    Abs _ _ e -> findApps' e apps
+    Case _ e es -> foldr findApps' (foldr findAppsCase apps es) e
+    Let _ b e' ->
+      findApps' e' $ foldr findApps'' apps b
+    _ -> apps
+    where
+      updateArity newArity old@(Just oldArity) | oldArity > newArity = old
+      updateArity newArity _ = Just newArity
+
+      unApp :: Expr Ann -> [Expr Ann] -> (Expr Ann, [Expr Ann])
+      unApp (App _ val arg) args = unApp val (arg : args)
+      unApp other args = (other, args)
+
+  findApps'' (NonRec _ _ e) apps = findApps' e apps
+  findApps'' (Rec binds) apps = foldr findApps' apps $ map snd binds
+
+
+  findAppsCase (CaseAlternative _ (Right e)) apps = findApps' e apps
+  findAppsCase (CaseAlternative _ (Left ges)) apps = foldr findApps' apps $ map snd ges
+  
+
   bindToErl :: Bind Ann -> m [Erl]
   bindToErl (NonRec _ ident val) =
     pure . EVarBind (identToVar ident) <$> valueToErl' (Just ident) val
@@ -255,7 +301,7 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
   qualifiedToErl (Qualified (Just mn') ident) | mn == mn' && ident `Set.notMember` declaredExportsSet  =
     Atom Nothing (runIdent ident) -- Local reference to local non-exported function
   qualifiedToErl (Qualified (Just mn') ident) = qualifiedToErl' mn' PureScriptModule ident -- Reference other modules or exported things via module name
-  qualifiedToErl _ = error "Invalid qualified identifier"
+  qualifiedToErl x = error $ "Invalid qualified identifier " <> T.unpack (showQualified showIdent x)
 
   qualifiedToVar (Qualified _ ident) = identToVar ident
 
