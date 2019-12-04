@@ -11,7 +11,7 @@ import           Control.Monad.Trans.Class (MonadTrans(..))
 import           Control.Monad.Writer.Class (MonadWriter(..))
 import qualified Language.PureScript.CoreFn as CF
 import           Language.PureScript.Externs (ExternsFile)
-import           Language.PureScript.Make.Monad
+import           Language.PureScript.Erl.Make.Monad
 import qualified Language.PureScript as P
 import           Control.Monad.Supply
 import qualified Data.Map as M
@@ -30,6 +30,8 @@ import qualified Paths_purerl as Paths
 import           Language.PureScript.Erl.CodeGen.Common (erlModuleName, atomModuleName, atom, ModuleType(..))
 import           Language.PureScript.Erl.CodeGen (moduleToErl)
 import           Language.PureScript.Erl.Pretty (prettyPrintErl)
+import           Language.PureScript.Erl.Errors
+import           Language.PureScript.Erl.Errors.Types
 
 
 
@@ -90,10 +92,10 @@ buildActions outputDir env foreigns usePrefix =
     case mn `M.lookup` foreigns of
       Just path
         | not $ requiresForeign m ->
-            tell $ P.errorMessage $ P.UnnecessaryFFIModule mn path
+            tell $ errorMessage $ UnnecessaryFFIModule mn path
         | otherwise -> pure ()
       Nothing ->
-        when (requiresForeign m) $ throwError . P.errorMessage $ P.MissingFFIModule mn
+        when (requiresForeign m) $ throwError . errorMessage $ MissingFFIModule mn
     for_ (mn `M.lookup` foreigns) $ \path ->
       copyFile path foreignFile
 

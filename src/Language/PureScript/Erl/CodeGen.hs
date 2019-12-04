@@ -31,7 +31,7 @@ import Control.Monad.Writer (MonadWriter(..))
 import Control.Monad.Supply.Class
 
 import Language.PureScript.CoreFn hiding (moduleExports)
-import Language.PureScript.Errors (MultipleErrors, rethrow, addHint, ErrorMessageHint(..), SimpleErrorMessage(..), errorMessage, rethrowWithPosition)
+import Language.PureScript.Errors (ErrorMessageHint(..))
 import Language.PureScript.Options
 import Language.PureScript.Names
 import Language.PureScript.Types
@@ -40,6 +40,8 @@ import qualified Language.PureScript.Constants as C
 import Language.PureScript.Traversals (sndM)
 import Language.PureScript.AST (SourceSpan, nullSourceSpan)
 
+import Language.PureScript.Erl.Errors.Types
+import Language.PureScript.Erl.Errors (MultipleErrors, rethrow, rethrowWithPosition, addHint, errorMessage)
 import Language.PureScript.Erl.CodeGen.Common
 import Language.PureScript.Erl.CodeGen.Optimizer
 
@@ -96,8 +98,8 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
     reexports <- traverse reExportForeign foreigns
     let (exports, erlDecls) = biconcat $ res <> reexports
     optimized <- traverse optimize erlDecls
-    traverse_ checkExport foreignTypes
-    let usedFfi = Set.fromList (map (runIdent . fst) foreignTypes)
+    traverse_ checkExport foreigns
+    let usedFfi = Set.fromList $ map runIdent foreigns
         definedFfi = Set.fromList (map fst foreignExports)
         unusedFfi = definedFfi Set.\\ usedFfi
     unless (Set.null unusedFfi) $
@@ -110,12 +112,6 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
 
   types :: M.Map (Qualified Ident) SourceType
   types = M.map (\(t, _, _) -> t) $ E.names env
-
-  -- types of foreign imports which happen to have been exported :(
-  foreignTypes :: [(Ident, SourceType)]
-  foreignTypes = M.toList $ M.mapKeys disqualify $ M.filterWithKey (\(Qualified mn' x) _ -> mn' == Just mn && Set.member x f) types
-    where
-    f = Set.fromList foreigns
 
   declaredExportsSet :: Set Ident
   declaredExportsSet = Set.fromList declaredExports
@@ -136,11 +132,13 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
   biconcat :: [([a], [b])] -> ([a], [b])
   biconcat x = (concatMap fst x, concatMap snd x)
 
+  explicitArities :: M.Map (Qualified Ident) Int
+  explicitArities = tyArity <$> types
+
   arities :: M.Map (Qualified Ident) Int
   arities = 
     let inferredMaxArities = foldr findApps M.empty decls
-        typeArities = tyArity <$> types
-    in typeArities `M.union` inferredMaxArities
+    in explicitArities `M.union` inferredMaxArities
 
   -- 're-export' foreign imports in the @ps module - also used for internal calls for non-exported foreign imports
   reExportForeign :: Ident -> m ([(Atom,Int)], [Erl])
@@ -162,13 +160,26 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
   exportArity :: Ident -> Int
   exportArity ident = fromMaybe 0 $ findExport $ runIdent ident
 
-  checkExport :: (Ident, SourceType) -> m ()
-  checkExport (ident, ty) =
-    case (findExport (runIdent ident), tyArity ty) of
-      (Just m, n) | m > n ->
-        -- TODO
-        error $ "Invalid FFI Arity"
-        -- throwError . errorMessage $ InvalidFFIArity mn (runIdent ident) m n
+  checkExport :: Ident -> m ()
+  checkExport ident =
+    case (findExport (runIdent ident), M.lookup (Qualified (Just mn) ident) explicitArities) of
+      -- TODO is it meaningful to check against inferred arities (as we are just now) or only explicit ones
+      -- This probably depends on the current codegen
+      
+      -- If we know the foreign import type (because it was exported) and the actual FFI type, it is an error if
+      -- the actual implementation has higher arity than the type does
+      -- If the actual implementation has lower arity, it may be just returning a function
+      (Just m, Just n) | m > n ->
+        throwError . errorMessage $ InvalidFFIArity mn (runIdent ident) m n
+      
+      -- If we don't know the declared type of the foreign import (because it is not exported), then we cannot say
+      -- what the implementation's arity should be, as it may be higher than can be inferred from applications in this
+      -- module (because there is no fully saturated application) or lower (because the ffi returns a function)
+      (Just _, Nothing) ->
+          pure ()
+
+      -- We certainly can tell if an import exists and the implementation isn't found
+      -- The opposite situation is handled at the top level of moduleToErl
       (Nothing, _) ->
         throwError . errorMessage $ MissingFFIImplementations mn [ident]
       _ -> pure ()

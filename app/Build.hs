@@ -13,46 +13,39 @@ import Prelude.Compat
 import           Control.Exception (tryJust)
 import           Control.Applicative
 import           Control.Monad
--- import qualified Data.Aeson as A
--- import           Data.Bool (bool)
--- import qualified Data.ByteString.Lazy.UTF8 as LBU8
--- import           Data.List (catMaybes)
 import Data.Maybe (catMaybes, mapMaybe)
 import qualified Data.Map as M
--- import qualified Data.Set as S
--- import qualified Data.Text as T
--- import           Data.Traversable (for)
 import qualified Language.PureScript as P
 import qualified Language.PureScript.CoreFn as CoreFn
 import qualified Language.PureScript.CoreFn.FromJSON as CoreFn
--- import qualified Language.PureScript.CST as CST
--- import           Language.PureScript.Errors.JSON
--- import           Language.PureScript.Make
 import qualified Options.Applicative as Opts
--- import qualified System.Console.ANSI as ANSI
+import qualified System.Console.ANSI as ANSI
+import qualified Data.Aeson as A
+import           Data.Bool (bool)
 import           System.Exit (exitSuccess, exitFailure)
--- import           System.Directory (getCurrentDirectory)
 import           System.FilePath.Glob (glob)
 import           System.FilePath (joinPath)
 import           System.IO (hPutStr, hPutStrLn, stderr)
 import           System.IO.UTF8 (readUTF8FilesT)
 import           System.IO.Error (tryIOError, isDoesNotExistError)
+import qualified Data.ByteString.Lazy.UTF8 as LBU8
 import Control.Monad.IO.Class
 import           Data.Aeson as Aeson
 import           Data.Aeson.Types (Parser, Value, listParser, parseMaybe)
 import           Data.Text (Text)
 import qualified Data.Text as T
 import           System.FilePath (replaceFileName, replaceExtension)
-import           System.Directory (doesFileExist)
+import           System.Directory (doesFileExist, getCurrentDirectory)
 import qualified Language.PureScript.Erl.Make as Make
+import qualified Language.PureScript.Erl.Make.Monad as MM
+import           Language.PureScript.Erl.Errors.Types
+import           Language.PureScript.Erl.Errors as E
+import           Language.PureScript.Erl.Errors.JSON
 import           Control.Monad.Supply
 
 
 data BuildOptions = BuildOptions
   { buildOutputDir    :: FilePath
-  -- , pscmOpts         :: P.Options
-  -- , pscmUsePrefix    :: Bool
-  -- , pscmJSONErrors   :: Bool
   }
 
 
@@ -68,20 +61,20 @@ compile BuildOptions{..} = do
                              , "Usage: For basic information, try the `--help' option."
                              ]
     exitFailure
-  (makeErrors, makeWarnings) <- P.runMake P.defaultOptions $ do
+  (makeErrors, makeWarnings) <- MM.runMake P.defaultOptions $ do
     modules <- forM corefn $ \corefn -> do
       let extern = replaceFileName corefn "externs.json"
       res <- readJSONFile corefn
-      resExterns <- P.readExternsFile extern
+      resExterns <- MM.readExternsFile extern
       case res of
         Just cf -> case parseMaybe CoreFn.moduleFromJSON cf of
           Just (_version, module') -> do
             foreignFile <- liftIO $ inferForeignModule $ CoreFn.modulePath module'
             case resExterns of
               Just f -> do
-                sourceTime <- max <$> P.getTimestamp corefn <*> P.getTimestamp extern
+                sourceTime <- max <$> MM.getTimestamp corefn <*> MM.getTimestamp extern
                 foreignTime <- case foreignFile of 
-                                Just ff -> max <$> P.getTimestamp ff <*> pure sourceTime
+                                Just ff -> max <$> MM.getTimestamp ff <*> pure sourceTime
                                 Nothing -> pure sourceTime
                 pure $ Just (module', foreignFile, f, foreignTime)
               Nothing -> do
@@ -104,7 +97,7 @@ compile BuildOptions{..} = do
         _ <- runSupplyT 0 $ Make.codegen buildActions m
         Make.ffiCodegen buildActions m
 
-  -- printWarningsAndErrors (P.optionsVerboseErrors pscmOpts) pscmJSONErrors makeWarnings makeErrors
+  printWarningsAndErrors False False makeWarnings makeErrors
   exitSuccess
 
   where
@@ -115,6 +108,25 @@ compile BuildOptions{..} = do
       Just outTs | outTs < ts -> True
       _ -> False
     
+
+  -- | Arguments: verbose, use JSON, warnings, errors
+  printWarningsAndErrors :: Bool -> Bool -> MultipleErrors -> Either MultipleErrors a -> IO ()
+  printWarningsAndErrors verbose False warnings errors = do
+    pwd <- getCurrentDirectory
+    cc <- bool Nothing (Just P.defaultCodeColor) <$> ANSI.hSupportsANSI stderr
+    let ppeOpts = E.defaultPPEOptions { E.ppeCodeColor = cc, E.ppeFull = verbose, E.ppeRelativeDirectory = pwd }
+    when (E.nonEmpty warnings) $
+      hPutStrLn stderr (E.prettyPrintMultipleWarnings ppeOpts warnings)
+    case errors of
+      Left errs -> do
+        hPutStrLn stderr (E.prettyPrintMultipleErrors ppeOpts errs)
+        exitFailure
+      Right _ -> return ()
+  printWarningsAndErrors verbose True warnings errors = do
+    hPutStrLn stderr . LBU8.toString . A.encode $
+      JSONResult (toJSONErrors verbose E.Warning warnings)
+                (either (toJSONErrors verbose E.Error) (const []) errors)
+    either (const exitFailure) (const (return ())) errors
 
   inferForeignModule :: MonadIO m => FilePath -> m (Maybe FilePath)
   inferForeignModule path = do
@@ -127,9 +139,9 @@ compile BuildOptions{..} = do
 -- | Read a JSON file in the 'Make' monad, returning 'Nothing' if the file does
 -- not exist or could not be parsed. Errors are captured using the 'MonadError'
 -- instance.
-readJSONFile :: FilePath -> P.Make (Maybe Value)
+readJSONFile :: FilePath -> MM.Make (Maybe Value)
 readJSONFile path =
-  P.makeIO ("read JSON file: " <> T.pack path) $ do
+  MM.makeIO ("read JSON file: " <> T.pack path) $ do
     r <- catchDoesNotExist $ Aeson.decodeFileStrict path
     return $ join r
 
