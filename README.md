@@ -1,4 +1,4 @@
-[![PureScript](assets/purescript-logo.png)](http://purescript.org) [![Erlang](assets/erlang-logo.svg)](https://www.erlang.org/)
+[![PureScript](assets/purescript-logo.png)](http://purescript.org) [![Erlang](assets/erlang-logo.svg | height=65 )](https://www.erlang.org/)
 
 # purerl - the PureScript Erlang backend
 
