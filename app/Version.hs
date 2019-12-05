@@ -14,9 +14,9 @@ versionString :: String
 versionString = showVersion Paths.version ++ extra
   where
 #ifdef RELEASE
-  extra = " [purerl]"
+  extra = ""
 #else
-  extra = " [purerl; development build; commit: " ++ $(GitRev.gitHash) ++ dirty ++ "]"
+  extra = " [development build; commit: " ++ $(GitRev.gitHash) ++ dirty ++ "]"
   dirty
     | $(GitRev.gitDirty) = " DIRTY"
     | otherwise = ""
