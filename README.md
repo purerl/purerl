@@ -1,5 +1,3 @@
-[![PureScript](assets/purescript-logo.png)](http://purescript.org) [![Erlang](assets/erlang-logo.svg)](https://www.erlang.org/)
-
 # purerl - the PureScript Erlang backend
 
 # WIP
