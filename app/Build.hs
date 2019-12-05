@@ -42,32 +42,33 @@ import           Language.PureScript.Erl.Errors.Types
 import           Language.PureScript.Erl.Errors as E
 import           Language.PureScript.Erl.Errors.JSON
 import           Control.Monad.Supply
+import           Language.PureScript.Erl.CodeGen.AST (Atom(..))
+import           Language.PureScript.Erl.CodeGen.Common (runAtom, atomModuleName, ModuleType(..))
+import           Language.PureScript.Erl.Run (runProgram)
 
 
 data BuildOptions = BuildOptions
   { buildOutputDir    :: FilePath
+  , buildRun          :: Maybe String
   }
 
 
 
 compile :: BuildOptions -> IO ()
 compile BuildOptions{..} = do
-  let -- externsGlob = joinPath [ buildOutputDir, "*", "externs.json" ]
-      coreFnGlob = joinPath [ buildOutputDir, "*", "corefn.json" ]
-  -- externs <- globWarningOnMisses warnFileTypeNotFound [externsGlob]
-  corefn <- globWarningOnMisses warnFileTypeNotFound [coreFnGlob]
-  when (null corefn) $ do
+  let coreFnGlob = joinPath [ buildOutputDir, "*", "corefn.json" ]
+  corefnFiles <- globWarningOnMisses warnFileTypeNotFound [coreFnGlob]
+  when (null corefnFiles) $ do
     hPutStr stderr $ unlines [ "purerl: No input files."
                              , "Usage: For basic information, try the `--help' option."
                              ]
     exitFailure
   (makeErrors, makeWarnings) <- MM.runMake P.defaultOptions $ do
-    modules <- forM corefn $ \corefn -> do
+    modules <- forM corefnFiles $ \corefn -> do
       let extern = replaceFileName corefn "externs.json"
       res <- readJSONFile corefn
       resExterns <- MM.readExternsFile extern
-      case res of
-        Just cf -> case parseMaybe CoreFn.moduleFromJSON cf of
+      case res >>= parseMaybe CoreFn.moduleFromJSON of
           Just (_version, module') -> do
             foreignFile <- liftIO $ inferForeignModule $ CoreFn.modulePath module'
             case resExterns of
@@ -78,14 +79,11 @@ compile BuildOptions{..} = do
                                 Nothing -> pure sourceTime
                 pure $ Just (module', foreignFile, f, foreignTime)
               Nothing -> do
-                liftIO $ putStrLn $ "Error parsing externs: " <> extern
+                liftIO $ hPutStrLn stderr $ "Error parsing externs: " <> extern
                 pure Nothing
           Nothing -> do
-            liftIO $ putStrLn $ "Error parsing corefn: " <> corefn
+            liftIO $ hPutStrLn stderr $ "Error parsing corefn: " <> corefn
             pure Nothing
-        Nothing -> do
-          liftIO $ putStrLn $ "Error parsing corefn: " <> corefn
-          pure Nothing
     let modules' = catMaybes modules
         foreigns = M.fromList $ mapMaybe (\(m, fp, _, _) -> (CoreFn.moduleName m,) <$> fp) modules'
         env = foldr P.applyExternsFileToEnvironment P.initEnvironment $ map (\(_, _, e, _) -> e) modules'
@@ -97,10 +95,17 @@ compile BuildOptions{..} = do
         _ <- runSupplyT 0 $ Make.codegen buildActions m
         Make.ffiCodegen buildActions m
 
-  printWarningsAndErrors False False makeWarnings makeErrors
-  exitSuccess
+  printWarningsAndErrors False False makeWarnings makeErrors 
 
+  case buildRun of
+    Nothing -> pure ()
+    Just runModule -> runProgram $ T.pack runModule
+  
+  exitSuccess
   where
+
+  
+
   needsBuild buildActions ts m = do
     outputTs <- Make.getOutputTimestamp buildActions m
     pure $ case outputTs of
@@ -177,10 +182,17 @@ outputDirectory = Opts.strOption $
   <> Opts.showDefault
   <> Opts.help "The output directory"
 
+run :: Opts.Parser (Maybe String)
+run = Opts.optional $ Opts.strOption $
+    Opts.long "run"
+    <> Opts.value "Main.main"
+    <> Opts.showDefault
+    <> Opts.help "Run the given function"
+
 
 buildOptions :: Opts.Parser BuildOptions
 buildOptions = BuildOptions <$> outputDirectory
-                            -- <*> options
+                            <*> run
                             -- <*> (not <$> noPrefix)
                             -- <*> jsonErrors
 
