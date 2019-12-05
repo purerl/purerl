@@ -137,7 +137,9 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
 
   arities :: M.Map (Qualified Ident) Int
   arities = 
-    let inferredMaxArities = foldr findApps M.empty decls
+    -- max arities is max of actual impl and most saturated application
+    let actualArities = M.fromList $ map (\(x, n) -> (Qualified (Just mn) (Ident x), n)) foreignExports
+        inferredMaxArities = foldr findApps actualArities decls
     in explicitArities `M.union` inferredMaxArities
 
   -- 're-export' foreign imports in the @ps module - also used for internal calls for non-exported foreign imports
