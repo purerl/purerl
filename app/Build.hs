@@ -185,8 +185,6 @@ outputDirectory = Opts.strOption $
 run :: Opts.Parser (Maybe String)
 run = Opts.optional $ Opts.strOption $
     Opts.long "run"
-    <> Opts.value "Main.main"
-    <> Opts.showDefault
     <> Opts.help "Run the given function"
 
 
@@ -197,4 +195,4 @@ buildOptions = BuildOptions <$> outputDirectory
                             -- <*> jsonErrors
 
 parser :: Opts.Parser (IO ())
-parser = compile <$>  (buildOptions)
+parser = compile <$> buildOptions
