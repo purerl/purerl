@@ -28,5 +28,4 @@ TAGS
 *.hp
 *.prof
 *.ps
-*.svg
 tests/purs/make/
