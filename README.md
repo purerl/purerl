@@ -16,7 +16,7 @@ The `purerl` backend requires the [mainline PureScript compiler (`purs`)](https:
 
 The recommended usage is with `spago`, which now supports alternative backends. In `spago.dhall` set
 ```dhall
-{ name = "my-project,
+{ name = "my-project",
 , backend = "purerl"
 , ...
 }
