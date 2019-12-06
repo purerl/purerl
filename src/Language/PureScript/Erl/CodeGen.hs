@@ -15,6 +15,7 @@ import Language.PureScript.Erl.CodeGen.AST as AST
 import qualified Data.Text as T
 import Data.Traversable
 import Data.Foldable
+import Data.List (nub)
 import Control.Monad (unless, replicateM)
 
 import qualified Data.Set as Set
@@ -44,6 +45,8 @@ import Language.PureScript.Erl.Errors.Types
 import Language.PureScript.Erl.Errors (MultipleErrors, rethrow, rethrowWithPosition, addHint, errorMessage)
 import Language.PureScript.Erl.CodeGen.Common
 import Language.PureScript.Erl.CodeGen.Optimizer
+
+import Debug.Trace (traceM)
 
 freshNameErl :: (MonadSupply m) => m T.Text
 freshNameErl = fmap (("_@" <>) . T.pack . show) fresh
@@ -97,7 +100,9 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
     res <- traverse topBindToErl decls
     reexports <- traverse reExportForeign foreigns
     let (exports, erlDecls) = biconcat $ res <> reexports
-    optimized <- traverse optimize erlDecls
+    -- optimized <- traverse optimize erlDecls
+    let optimized = erlDecls
+
     traverse_ checkExport foreigns
     let usedFfi = Set.fromList $ map runIdent foreigns
         definedFfi = Set.fromList (map fst foreignExports)
@@ -418,7 +423,13 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
 
   bindersToErl :: [Erl] -> [CaseAlternative Ann] -> m ([Erl], [(EFunBinder, Erl)], [Erl])
   bindersToErl vals cases = do
-    res <- mapM caseToErl cases
+    let binderLengths = map (length . caseAlternativeBinders) $ cases
+        maxBinders = maximum binderLengths
+    if (length (nub binderLengths) > 1) then
+      traceM $ "Found inconsistent binder lengths: " <> show binderLengths
+    else
+      pure ()
+    res <- mapM (caseToErl maxBinders) cases
     let arrayVars = map fst $ concatMap (\(_,_,x) -> x) res
         convBinder (count, binds) (_, binders, arrayMatches) =
           (count + length arrayMatches, binds ++ map go binders)
@@ -429,9 +440,10 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
 
     pure (concatMap (\(x,_,_) -> x) res, binders', arrayVars)
     where
-    caseToErl :: CaseAlternative Ann -> m ([Erl], [(EFunBinder, Erl)], [(Erl, Erl)])
-    caseToErl (CaseAlternative binders alt) = do
-      b' <- mapM (binderToErl' vals) binders
+    caseToErl :: Int -> CaseAlternative Ann -> m ([Erl], [(EFunBinder, Erl)], [(Erl, Erl)])
+    caseToErl numBinders (CaseAlternative binders alt) = do
+      let binders' = binders ++ (replicate (numBinders - length binders) $ NullBinder (nullSourceSpan , [], Nothing, Nothing))
+      b' <- mapM (binderToErl' vals) binders'
       let (bs, erls) = second concat $ unzip b'
       (es, res) <- case alt of
         Right e -> do
