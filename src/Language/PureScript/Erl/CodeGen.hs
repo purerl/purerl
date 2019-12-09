@@ -44,7 +44,6 @@ import Language.PureScript.AST (SourceSpan, nullSourceSpan)
 import Language.PureScript.Erl.Errors.Types
 import Language.PureScript.Erl.Errors (MultipleErrors, rethrow, rethrowWithPosition, addHint, errorMessage)
 import Language.PureScript.Erl.CodeGen.Common
-import Language.PureScript.Erl.CodeGen.Optimizer
 
 import Debug.Trace (traceM)
 

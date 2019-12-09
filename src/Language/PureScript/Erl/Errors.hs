@@ -23,7 +23,7 @@ import qualified Data.Map as M
 import           Data.Ord (comparing)
 import qualified Data.Text as T
 import           Data.Text (Text)
-import           Language.PureScript.AST (SourceSpan, ErrorMessageHint(..), Context, HintCategory(..), DeclarationRef(..), ImportDeclarationType(..), Expr(..))
+import           Language.PureScript.AST (SourceSpan, ErrorMessageHint(..), HintCategory(..), DeclarationRef(..), ImportDeclarationType(..), Expr(..))
 import           Language.PureScript.AST.SourcePos
 import qualified Language.PureScript.Constants as C
 import           Language.PureScript.Crash
@@ -222,7 +222,7 @@ defaultPPEOptions = PPEOptions
 
 -- | Pretty print a single error, simplifying if necessary
 prettyPrintSingleError :: PPEOptions -> ErrorMessage -> Box.Box
-prettyPrintSingleError (PPEOptions codeColor full level showDocs relPath) e = flip evalState defaultUnknownMap $ do
+prettyPrintSingleError (PPEOptions codeColor full _level _showDocs relPath) e = flip evalState defaultUnknownMap $ do
   let em = if full then e else simplifyErrorMessage e
   um <- get
   return (prettyPrintErrorMessage um em)
@@ -463,11 +463,6 @@ prettyPrintSingleError (PPEOptions codeColor full level showDocs relPath) e = fl
   prettyDepth :: Int
   prettyDepth | full = 1000
               | otherwise = 3
-
-  levelText :: Text
-  levelText = case level of
-    Error -> "error"
-    Warning -> "warning"
 
   paras :: [Box.Box] -> Box.Box
   paras = Box.vcat Box.left

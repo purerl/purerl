@@ -15,7 +15,7 @@ import           Data.Text (Text)
 import qualified Data.Text as T
 import           Language.PureScript.Erl.CodeGen.AST (Atom(..))
 import           Language.PureScript.Erl.CodeGen.Common (runAtom, atomModuleName, ModuleType(..))
-import           System.Process (readProcessWithExitCode, runCommand)
+import           System.Process (readProcessWithExitCode)
 import           System.Exit (exitFailure, ExitCode(..))
 import           System.FilePath.Glob (glob)
 

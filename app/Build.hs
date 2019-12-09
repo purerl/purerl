@@ -1,14 +1,9 @@
--- {-# LANGUAGE DataKinds #-}
--- {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
--- {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 
 
 module Build (parser) where
-
-import Prelude.Compat
 
 import           Control.Exception (tryJust)
 import           Control.Monad
