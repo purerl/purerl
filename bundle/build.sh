@@ -22,9 +22,9 @@ mkdir -p bundle/build/purerl
 # Strip the binary, and copy it to the staging directory
 if [ "$OS" = "win64" ]
 then
-  BIN="purs.exe"
+  BIN="purerl.exe"
 else
-  BIN="purs"
+  BIN="purerl"
 fi
 FULL_BIN="$(stack path --local-install-root)/bin/$BIN"
 if [ "$OS" != "win64" ]
