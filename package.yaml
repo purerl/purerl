@@ -10,6 +10,8 @@ license: BSD3
 github: purerl/purerl
 # homepage: http://www.purescript.org/
 extra-source-files:
+  - bundle/build.sh
+  - bundle/README
   - stack.yaml
   - README.md
   - INSTALL.md
