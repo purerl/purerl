@@ -4,13 +4,9 @@ import Prelude
 
 import           Control.Monad hiding (sequence)
 import           Control.Monad.Error.Class (MonadError(..))
-import           Control.Monad.IO.Class
-import           Control.Monad.Reader (asks)
-import           Control.Monad.Supply
 import           Control.Monad.Trans.Class (MonadTrans(..))
 import           Control.Monad.Writer.Class (MonadWriter(..))
 import qualified Language.PureScript.CoreFn as CF
-import           Language.PureScript.Externs (ExternsFile)
 import           Language.PureScript.Erl.Make.Monad
 import qualified Language.PureScript as P
 import           Control.Monad.Supply
@@ -19,7 +15,7 @@ import qualified Data.List.NonEmpty as NEL
 import           Language.PureScript.Erl.Parser (parseFile)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
-import           System.FilePath ((</>), makeRelative, splitPath, normalise)
+import           System.FilePath ((</>))
 import           Data.Foldable (for_, minimum)
 import           System.Directory (getCurrentDirectory)
 import           Data.Version (showVersion)

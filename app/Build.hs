@@ -1,19 +1,13 @@
--- {-# LANGUAGE DataKinds #-}
--- {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
--- {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 
 
 module Build (parser) where
 
-import Prelude.Compat
-
 import           Control.Exception (tryJust)
-import           Control.Applicative
 import           Control.Monad
-import Data.Maybe (catMaybes, mapMaybe)
+import           Data.Maybe (catMaybes, mapMaybe)
 import qualified Data.Map as M
 import qualified Language.PureScript as P
 import qualified Language.PureScript.CoreFn as CoreFn
@@ -24,26 +18,20 @@ import qualified Data.Aeson as A
 import           Data.Bool (bool)
 import           System.Exit (exitSuccess, exitFailure)
 import           System.FilePath.Glob (glob)
-import           System.FilePath (joinPath)
 import           System.IO (hPutStr, hPutStrLn, stderr)
-import           System.IO.UTF8 (readUTF8FilesT)
-import           System.IO.Error (tryIOError, isDoesNotExistError)
+import           System.IO.Error (isDoesNotExistError)
 import qualified Data.ByteString.Lazy.UTF8 as LBU8
 import Control.Monad.IO.Class
 import           Data.Aeson as Aeson
-import           Data.Aeson.Types (Parser, Value, listParser, parseMaybe)
-import           Data.Text (Text)
+import           Data.Aeson.Types (Value, parseMaybe)
 import qualified Data.Text as T
-import           System.FilePath (replaceFileName, replaceExtension)
+import           System.FilePath (replaceFileName, replaceExtension, joinPath)
 import           System.Directory (doesFileExist, getCurrentDirectory)
 import qualified Language.PureScript.Erl.Make as Make
 import qualified Language.PureScript.Erl.Make.Monad as MM
-import           Language.PureScript.Erl.Errors.Types
 import           Language.PureScript.Erl.Errors as E
 import           Language.PureScript.Erl.Errors.JSON
 import           Control.Monad.Supply
-import           Language.PureScript.Erl.CodeGen.AST (Atom(..))
-import           Language.PureScript.Erl.CodeGen.Common (runAtom, atomModuleName, ModuleType(..))
 import           Language.PureScript.Erl.Run (runProgram)
 
 
