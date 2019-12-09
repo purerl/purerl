@@ -24,7 +24,7 @@ STACK="stack --no-terminal --jobs=2"
 STACK_OPTS="--test"
 if [ "$CI_RELEASE" = "true" ]
 then
-  STACK_OPTS="$STACK_OPTS --flag=purescript:RELEASE"
+  STACK_OPTS="$STACK_OPTS --flag=purerl:RELEASE"
 else
   STACK_OPTS="$STACK_OPTS --fast"
 fi
@@ -35,7 +35,7 @@ $STACK build --only-snapshot $STACK_OPTS
 
 # Test in a source distribution (see above)
 $STACK sdist --tar-dir sdist-test;
-tar -xzf sdist-test/purescript-*.tar.gz -C sdist-test --strip-components=1
+tar -xzf sdist-test/purerl-*.tar.gz -C sdist-test --strip-components=1
 pushd sdist-test
 $STACK build --pedantic $STACK_OPTS
 popd
