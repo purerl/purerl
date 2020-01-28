@@ -55,17 +55,19 @@ compile BuildOptions{..} = do
     modules <- forM corefnFiles $ \corefn -> do
       let extern = replaceFileName corefn "externs.json"
       res <- readJSONFile corefn
-      resExterns <- MM.readExternsFile extern
+      resExterns <- MM.readJSONFile extern
       case res >>= parseMaybe CoreFn.moduleFromJSON of
           Just (_version, module') -> do
             foreignFile <- liftIO $ inferForeignModule $ CoreFn.modulePath module'
             case resExterns of
               Just f -> do
+                when (not $ P.externsIsCurrentVersion f) $
+                  liftIO $ hPutStrLn stderr $ "Found externs for wrong compiler version (continuing anyway): " <> extern
                 sourceTime <- max <$> MM.getTimestamp corefn <*> MM.getTimestamp extern
                 foreignTime <- case foreignFile of 
                                 Just ff -> max <$> MM.getTimestamp ff <*> pure sourceTime
                                 Nothing -> pure sourceTime
-                pure $ Just (module', foreignFile, f, foreignTime)
+                pure $ Just ( module', foreignFile, f, foreignTime)
               Nothing -> do
                 liftIO $ hPutStrLn stderr $ "Error parsing externs: " <> extern
                 pure Nothing
