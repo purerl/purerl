@@ -75,7 +75,8 @@ buildActions outputDir env foreigns usePrefix =
           "-module(" <> atom (atomModuleName mn PureScriptModule) <> ").",
           "-export([" <> T.intercalate ", " exports <> "]).",
           "-compile(nowarn_shadow_vars).",
-          "-compile(nowarn_unused_vars).",  -- consider using _ vars
+          "-compile(nowarn_unused_vars).",
+          "-compile(nowarn_unused_function).",
           "-compile(no_auto_import)."
           ]
     let erl :: T.Text = T.unlines $ map ("% " <>) prefix ++ directives ++ [ pretty ]
