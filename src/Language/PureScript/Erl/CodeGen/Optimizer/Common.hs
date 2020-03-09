@@ -30,6 +30,11 @@ isUncurriedFn :: (Text, PSString) -> Erl -> Bool
 isUncurriedFn (moduleName, dictName) (EAtomLiteral (Atom (Just x) y)) = x == moduleName && y == atomPS dictName
 isUncurriedFn _ _ = False
 
+isUncurriedFn':: (Text, Text) -> Erl -> Bool
+isUncurriedFn' (moduleName, fnName) (EAtomLiteral (Atom (Just x) y)) = x == moduleName && y == fnName
+isUncurriedFn' _ _ = False
+
+
 isCurriedFn :: (Text, PSString) -> Erl -> Bool
 isCurriedFn = isDict
 

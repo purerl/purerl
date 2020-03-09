@@ -63,3 +63,9 @@ effectUncurried = "effect_uncurried@ps"
 
 dataIntBits :: forall a. (IsString a) => a
 dataIntBits = "data_int_bits@ps"
+
+erlAtom :: forall a. (IsString a) => a
+erlAtom = "erl_atom@ps"
+
+atom :: forall a. (IsString a) => a
+atom = "atom"

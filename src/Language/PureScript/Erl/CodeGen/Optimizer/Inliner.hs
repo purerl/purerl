@@ -9,6 +9,7 @@ module Language.PureScript.Erl.CodeGen.Optimizer.Inliner
   )
   where
 
+
 import Prelude.Compat
 
 import Data.Text (Text)
@@ -82,7 +83,8 @@ inlineCommonValues = everywhereOnErl convert
   fnTop = (C.dataBounded, C.top)
 
 inlineCommonOperators :: Erl -> Erl
-inlineCommonOperators = everywhereOnErlTopDown $ applyAll $
+inlineCommonOperators = 
+  everywhereOnErlTopDown $ applyAll $
   [ binary semiringNumber opAdd Add
   , binary semiringNumber opMul Multiply
   , binary ringNumber opSub Subtract
@@ -130,8 +132,10 @@ inlineCommonOperators = everywhereOnErlTopDown $ applyAll $
   , binary heytingAlgebraBoolean opDisj Or
   , unary  heytingAlgebraBoolean opNot Not
 
-  , inlineNonClassFunction (isModFn (EC.dataFunction, C.apply)) $ \f x -> EApp f [x]
-  , inlineNonClassFunction (isModFn (EC.dataFunction, C.applyFlipped)) $ \x f -> EApp f [x]
+  , inlineNonClassFunction (EC.dataFunction, C.apply) $ \f x -> EApp f [x]
+  , inlineNonClassFunction (EC.dataFunction, C.applyFlipped) $ \x f -> EApp f [x]
+  
+  , inlineErlAtom
   ] ++ 
   [ fn | i <- [0..10], fn <- [ mkFn i, runFn i ] ] ++
   [ fn | i <- [1..10], fn <- [ mkEffFn i, runEffFn i ] ]
@@ -150,11 +154,22 @@ inlineCommonOperators = everywhereOnErlTopDown $ applyAll $
     convert (EApp (EApp fn [dict']) [x]) | isDict dicts dict' && isDict fns fn = EUnary op x
     convert other = other
 
-  inlineNonClassFunction :: (Erl -> Bool) -> (Erl -> Erl -> Erl) -> Erl -> Erl
-  inlineNonClassFunction p f = everywhereOnErl convert
+  inlineNonClassFunction :: (Text, Text) -> (Erl -> Erl -> Erl) -> Erl -> Erl
+  inlineNonClassFunction modFn f = everywhereOnErl convert
     where
     convert :: Erl -> Erl
-    convert (EApp (EApp op' [x]) [y]) | p op' = f x y
+    convert (EApp (EApp op' [x]) [y]) | isModFn modFn op' = f x y
+    convert (EApp op' [x, y]) | isUncurriedFn' modFn op' = f x y
+    convert other = other
+
+  inlineErlAtom :: Erl -> Erl
+  inlineErlAtom = everywhereOnErl convert
+    where
+    convert :: Erl -> Erl
+    convert (EApp op' [EStringLiteral s])
+            | isModFn (EC.erlAtom, EC.atom) op'
+              || isUncurriedFn' (EC.erlAtom, EC.atom) op' =
+      EAtomLiteral (AtomPS Nothing s)
     convert other = other
 
   isModFn :: (Text, Text) -> Erl -> Bool

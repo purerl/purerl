@@ -44,6 +44,7 @@ import Language.PureScript.AST (SourceSpan, nullSourceSpan)
 import Language.PureScript.Erl.Errors.Types
 import Language.PureScript.Erl.Errors (MultipleErrors, rethrow, rethrowWithPosition, addHint, errorMessage)
 import Language.PureScript.Erl.CodeGen.Common
+import Language.PureScript.Erl.CodeGen.Optimizer
 
 import Debug.Trace (traceM)
 
@@ -99,8 +100,8 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
     res <- traverse topBindToErl decls
     reexports <- traverse reExportForeign foreigns
     let (exports, erlDecls) = biconcat $ res <> reexports
-    -- optimized <- traverse optimize erlDecls
-    let optimized = erlDecls
+    optimized <- traverse optimize erlDecls
+    -- let optimized = erlDecls
 
     traverse_ checkExport foreigns
     let usedFfi = Set.fromList $ map runIdent foreigns
