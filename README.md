@@ -1,9 +1,5 @@
 # purerl - the PureScript Erlang backend
 
-# WIP
-
-This backend (as opposed to compiler fork) is currently in an experimental state.
-
 # Overview
 
 A small strongly typed programming language with expressive types, written in and inspired by Haskell.
