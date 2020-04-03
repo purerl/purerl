@@ -342,7 +342,14 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
 
   valueToErl' ident (Abs _ arg val) = do
     ret <- valueToErl val
-    return $ EFun1 (fmap identToVar ident) (identToVar arg) ret
+    
+    -- TODO this is mangled in corefn json
+    let fixIdent (Ident "$__unused") = UnusedIdent
+        fixIdent x = x
+        arg' = case fixIdent arg of
+                  UnusedIdent -> "_"
+                  _           -> identToVar arg
+    return $ EFun1 (fmap identToVar ident) arg' ret
 
   valueToErl' _ (Accessor _ prop val) = do
     eval <- valueToErl val

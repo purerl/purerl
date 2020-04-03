@@ -31,6 +31,12 @@ magicDo'' effectModule C.EffectDictionaries{..} = everywhereOnErl undo . everywh
   -- Desugar discard
   convert discard@(EApp _ [_, _, m, EFun1 Nothing _ e]) | isDiscard discard =
     EFun0 (Just fnName) (EBlock ((EApp m []) : [ EApp e [] ]))
+  -- -- Desugar bind to wildcard
+  -- convert (App _ (App _ bind [m]) [Function s1 Nothing [] (Block s2 js)])
+  --   | isBind bind =
+  --   Function s1 (Just fnName) [] $ Block s2 (App s2 m [] : map applyReturns js )
+  convert bind'@(EApp _ [_, m, EFun1 Nothing "_" e]) | isBind bind' =
+    EFun0 (Just fnName) (EBlock (EApp m [] : [ EApp e [] ]))
   -- Desugar bind
   convert bind'@(EApp _ [_, m, EFun1 Nothing var e]) | isBind bind' =
     EFun0 (Just fnName) (EBlock (EVarBind var (EApp m []) : [ EApp e [] ]))
