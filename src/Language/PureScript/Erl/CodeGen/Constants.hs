@@ -1,6 +1,37 @@
 module Language.PureScript.Erl.CodeGen.Constants where
 
 import Data.String (IsString)
+import Language.PureScript.PSString (PSString)
+
+data EffectDictionaries = EffectDictionaries
+  { edApplicativeDict :: PSString
+  , edBindDict :: PSString
+  , edMonadDict :: PSString
+  , edWhile :: PSString
+  , edUntil :: PSString
+  , edFunctor :: PSString
+  }
+
+effDictionaries :: EffectDictionaries
+effDictionaries = EffectDictionaries
+  { edApplicativeDict = "applicativeEff"
+  , edBindDict = "bindEff"
+  , edMonadDict = "monadEff"
+  , edWhile = "whileE"
+  , edUntil = "untilE"
+  , edFunctor = "functorEff"
+  }
+
+effectDictionaries :: EffectDictionaries
+effectDictionaries = EffectDictionaries
+  { edApplicativeDict = "applicativeEffect"
+  , edBindDict = "bindEffect"
+  , edMonadDict = "monadEffect"
+  , edWhile = "whileE"
+  , edUntil = "untilE"
+  , edFunctor = "functorEffect"
+  }
+
 
 -- Modules
 
@@ -55,6 +86,10 @@ dataEuclideanRing = "data_euclideanRing@ps"
 dataFunction :: forall a. (IsString a) => a
 dataFunction = "data_function@ps"
 
+dataFunctor :: forall a. (IsString a) => a
+dataFunctor = "data_functor@ps"
+
+
 dataFunctionUncurried :: forall a. (IsString a) => a
 dataFunctionUncurried = "data_function_uncurried@ps"
 
@@ -69,3 +104,6 @@ erlAtom = "erl_atom@ps"
 
 atom :: forall a. (IsString a) => a
 atom = "atom"
+
+void :: forall a. (IsString a) => a
+void = "void"

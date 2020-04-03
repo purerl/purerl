@@ -82,8 +82,8 @@ inlineCommonValues = everywhereOnErl convert
   fnBottom = (C.dataBounded, C.bottom)
   fnTop = (C.dataBounded, C.top)
 
-inlineCommonOperators :: Erl -> Erl
-inlineCommonOperators = 
+inlineCommonOperators :: Text -> EC.EffectDictionaries -> Erl -> Erl
+inlineCommonOperators effectModule EC.EffectDictionaries{..} = 
   everywhereOnErlTopDown $ applyAll $
   [ binary semiringNumber opAdd Add
   , binary semiringNumber opMul Multiply
@@ -136,6 +136,9 @@ inlineCommonOperators =
   , inlineNonClassFunction (EC.dataFunction, C.applyFlipped) $ \x f -> EApp f [x]
   
   , inlineErlAtom
+
+  , unaryFn (effectModule, edFunctor) functorVoid id
+
   ] ++ 
   [ fn | i <- [0..10], fn <- [ mkFn i, runFn i ] ] ++
   [ fn | i <- [1..10], fn <- [ mkEffFn i, runEffFn i ] ]
@@ -152,6 +155,15 @@ inlineCommonOperators =
     where
     convert :: Erl -> Erl
     convert (EApp (EApp fn [dict']) [x]) | isDict dicts dict' && isDict fns fn = EUnary op x
+    convert other = other
+
+  unaryFn ::  (Text, PSString) -> (Text, PSString) -> (Erl -> Erl) -> Erl -> Erl
+  unaryFn dicts fns f = everywhereOnErl convert
+    where
+    convert :: Erl -> Erl
+    convert (EApp (EApp (EApp fn []) [EApp dict' []]) [x]) | isFnName dicts dict' && isFnName fns fn = f x
+    convert (EApp (EApp fn [EApp dict' []]) [x]) | isFnName dicts dict' && isFnName fns fn = f x
+    convert (EApp fn [EApp dict' [], x]) | isFnName dicts dict' && isFnName fns fn = f x
     convert other = other
 
   inlineNonClassFunction :: (Text, Text) -> (Erl -> Erl -> Erl) -> Erl -> Erl
@@ -328,3 +340,6 @@ opDisj = (EC.dataHeytingAlgebra, C.disj)
 
 opNot :: forall a b. (IsString a, IsString b) => (a, b)
 opNot = (EC.dataHeytingAlgebra, C.not)
+
+functorVoid :: forall a b. (IsString a, IsString b) => (a, b)
+functorVoid = (EC.dataFunctor, EC.void)

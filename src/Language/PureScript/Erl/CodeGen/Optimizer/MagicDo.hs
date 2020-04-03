@@ -14,13 +14,13 @@ import qualified Language.PureScript.Constants as C
 import qualified Language.PureScript.Erl.CodeGen.Constants as EC
 
 magicDo :: Erl -> Erl
-magicDo = magicDo'' EC.eff C.effDictionaries
+magicDo = magicDo'' EC.eff EC.effDictionaries
 
 magicDo' :: Erl -> Erl
-magicDo' = magicDo'' EC.effect C.effectDictionaries
+magicDo' = magicDo'' EC.effect EC.effectDictionaries
 
-magicDo'' :: Text -> C.EffectDictionaries -> Erl -> Erl
-magicDo'' effectModule C.EffectDictionaries{..} = everywhereOnErl undo . everywhereOnErlTopDown convert
+magicDo'' :: Text -> EC.EffectDictionaries -> Erl -> Erl
+magicDo'' effectModule EC.EffectDictionaries{..} = everywhereOnErl undo . everywhereOnErlTopDown convert
   where
   -- The name of the function block which is added to denote a do block
   fnName = "__do"

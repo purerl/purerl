@@ -18,6 +18,7 @@ import Language.PureScript.Erl.CodeGen.Optimizer.Common
 import Language.PureScript.Erl.CodeGen.Optimizer.Inliner
 import Language.PureScript.Erl.CodeGen.Optimizer.Guards
 
+import qualified Language.PureScript.Erl.CodeGen.Constants as EC
 -- |
 -- Apply a series of optimizer passes to simplified Javascript code
 --
@@ -27,7 +28,8 @@ optimize erl = do
     erl' <- untilFixedPoint (tidyUp . applyAll
       [ 
         inlineCommonValues
-      , inlineCommonOperators
+      , inlineCommonOperators EC.eff EC.effDictionaries
+      , inlineCommonOperators EC.effect EC.effectDictionaries
       ]
       ) erl
     untilFixedPoint tidyUp

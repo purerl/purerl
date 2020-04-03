@@ -27,8 +27,17 @@ isDict (moduleName, dictName) (EApp (EAtomLiteral (Atom (Just x) y)) []) = x == 
 isDict _ _ = False
 
 isUncurriedFn :: (Text, PSString) -> Erl -> Bool
-isUncurriedFn (moduleName, dictName) (EAtomLiteral (Atom (Just x) y)) = x == moduleName && y == atomPS dictName
-isUncurriedFn _ _ = False
+isUncurriedFn = isFnName
+
+isFnName :: (Text, PSString) -> Erl -> Bool
+isFnName (moduleName, dictName) (EAtomLiteral (Atom (Just x) y)) = x == moduleName && y == atomPS dictName
+isFnName _ _ = False
+
+isAppliedDict :: (Text, PSString) -> (Text, PSString) -> Erl -> Bool
+isAppliedDict fnDict theDict (EApp (EApp fn []) [EApp dict []]) = isFnName theDict dict && isFnName fnDict fn
+isAppliedDict fnDict theDict (EApp fn [EApp dict []]) = isFnName theDict dict && isFnName fnDict fn
+isAppliedDict _ _ _ = False
+
 
 isUncurriedFn':: (Text, Text) -> Erl -> Bool
 isUncurriedFn' (moduleName, fnName) (EAtomLiteral (Atom (Just x) y)) = x == moduleName && y == fnName
