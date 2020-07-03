@@ -2,7 +2,7 @@
 -- This module implements the "Magic Do" optimization, which inlines calls to return
 -- and bind for the Eff monad, as well as some of its actions.
 --
-module Language.PureScript.Erl.CodeGen.Optimizer.MagicDo (magicDo, magicDo') where
+module Language.PureScript.Erl.CodeGen.Optimizer.MagicDo (magicDo) where
 
 import Prelude.Compat
 
@@ -14,10 +14,7 @@ import qualified Language.PureScript.Constants as C
 import qualified Language.PureScript.Erl.CodeGen.Constants as EC
 
 magicDo :: Erl -> Erl
-magicDo = magicDo'' EC.eff EC.effDictionaries
-
-magicDo' :: Erl -> Erl
-magicDo' = magicDo'' EC.effect EC.effectDictionaries
+magicDo = magicDo'' EC.effect EC.effectDictionaries
 
 magicDo'' :: Text -> EC.EffectDictionaries -> Erl -> Erl
 magicDo'' effectModule EC.EffectDictionaries{..} = everywhereOnErl undo . everywhereOnErlTopDown convert

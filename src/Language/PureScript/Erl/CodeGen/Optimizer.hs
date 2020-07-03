@@ -28,12 +28,10 @@ optimize erl = do
     erl' <- untilFixedPoint (tidyUp . applyAll
       [ 
         inlineCommonValues
-      , inlineCommonOperators EC.eff EC.effDictionaries
       , inlineCommonOperators EC.effect EC.effectDictionaries
       ]
       ) erl
     untilFixedPoint tidyUp
-      =<< untilFixedPoint (return . magicDo')
       =<< untilFixedPoint (return . magicDo) 
       erl'
 

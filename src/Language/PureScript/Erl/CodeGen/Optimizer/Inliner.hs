@@ -17,7 +17,7 @@ import qualified Data.Text as T
 import Data.String (IsString)
 import Language.PureScript.PSString (PSString, mkString)
 import Data.Monoid ((<>))
-import Data.Maybe (fromMaybe, mapMaybe)
+import Data.Maybe (mapMaybe)
 import qualified Data.Set as Set
 
 import Language.PureScript.Erl.CodeGen.AST
@@ -25,6 +25,9 @@ import Language.PureScript.Erl.CodeGen.Optimizer.Common
 import qualified Language.PureScript.Constants as C
 import qualified Language.PureScript.Erl.CodeGen.Constants as EC
 import Control.Monad.Supply.Class (MonadSupply)
+import Language.PureScript.Erl.CodeGen.Common (atomPS)
+
+import qualified Data.Map as Map
 
 shouldInline :: Erl -> Bool
 shouldInline (EVar _) = True
@@ -82,83 +85,29 @@ inlineCommonValues = everywhereOnErl convert
   fnBottom = (C.dataBounded, C.bottom)
   fnTop = (C.dataBounded, C.top)
 
+data Binary = Binary (Text, PSString) (Text, PSString) BinaryOperator
+data Unary = Unary (Text, PSString) (Text, PSString) UnaryOperator
+
 inlineCommonOperators :: Text -> EC.EffectDictionaries -> Erl -> Erl
 inlineCommonOperators effectModule EC.EffectDictionaries{..} = 
   everywhereOnErlTopDown $ applyAll $
-  [ binary semiringNumber opAdd Add
-  , binary semiringNumber opMul Multiply
-  , binary ringNumber opSub Subtract
-  , unary  ringNumber opNegate Negate
-  , binary semiringInt opAdd Add
-  , binary semiringInt opMul Multiply
-  , binary ringInt opSub Subtract
-  , unary  ringInt opNegate Negate
-
-  , binary euclideanRingNumber opDiv FDivide
-
-  , binary eqNumber opEq IdenticalTo
-  , binary eqNumber opNotEq NotIdenticalTo
-  , binary eqInt opEq IdenticalTo
-  , binary eqInt opNotEq NotIdenticalTo
-  , binary eqString opEq IdenticalTo
-  , binary eqString opNotEq NotIdenticalTo
-  , binary eqChar opEq IdenticalTo
-  , binary eqChar opNotEq NotIdenticalTo
-  , binary eqBoolean opEq IdenticalTo
-  , binary eqBoolean opNotEq NotIdenticalTo
-
-  , binary ordBoolean opLessThan LessThan
-  , binary ordBoolean opLessThanOrEq LessThanOrEqualTo
-  , binary ordBoolean opGreaterThan GreaterThan
-  , binary ordBoolean opGreaterThanOrEq GreaterThanOrEqualTo
-  , binary ordChar opLessThan LessThan
-  , binary ordChar opLessThanOrEq LessThanOrEqualTo
-  , binary ordChar opGreaterThan GreaterThan
-  , binary ordChar opGreaterThanOrEq GreaterThanOrEqualTo
-  , binary ordInt opLessThan LessThan
-  , binary ordInt opLessThanOrEq LessThanOrEqualTo
-  , binary ordInt opGreaterThan GreaterThan
-  , binary ordInt opGreaterThanOrEq GreaterThanOrEqualTo
-  , binary ordNumber opLessThan LessThan
-  , binary ordNumber opLessThanOrEq LessThanOrEqualTo
-  , binary ordNumber opGreaterThan GreaterThan
-  , binary ordNumber opGreaterThanOrEq GreaterThanOrEqualTo
-  , binary ordString opLessThan LessThan
-  , binary ordString opLessThanOrEq LessThanOrEqualTo
-  , binary ordString opGreaterThan GreaterThan
-  , binary ordString opGreaterThanOrEq GreaterThanOrEqualTo
-
-  , binary heytingAlgebraBoolean opConj And
-  , binary heytingAlgebraBoolean opDisj Or
-  , unary  heytingAlgebraBoolean opNot Not
-
+  [ 
+    binaryOps
+  , unaryOps
+  
   , inlineNonClassFunction (EC.dataFunction, C.apply) $ \f x -> EApp f [x]
   , inlineNonClassFunction (EC.dataFunction, C.applyFlipped) $ \x f -> EApp f [x]
   
   , inlineErlAtom
 
   , unaryFn (effectModule, edFunctor) functorVoid id
+  , onNFn
+  ] 
 
-  ] ++ 
-  [ fn | i <- [0..10], fn <- [ mkFn i, runFn i ] ] ++
-  [ fn | i <- [1..10], fn <- [ mkEffFn i, runEffFn i ] ]
   where
-  binary ::  (Text, PSString) -> (Text, PSString) -> BinaryOperator -> Erl -> Erl
-  binary dict fns op = everywhereOnErl convert
-    where
-    convert :: Erl -> Erl
-    convert (EApp fn [dict', x, y]) | isDict dict dict' && isUncurriedFn fns fn = EBinary op x y
-    convert other = other
-
-  unary ::  (Text, PSString) -> (Text, PSString) -> UnaryOperator -> Erl -> Erl
-  unary dicts fns op = everywhereOnErl convert
-    where
-    convert :: Erl -> Erl
-    convert (EApp (EApp fn [dict']) [x]) | isDict dicts dict' && isDict fns fn = EUnary op x
-    convert other = other
 
   unaryFn ::  (Text, PSString) -> (Text, PSString) -> (Erl -> Erl) -> Erl -> Erl
-  unaryFn dicts fns f = everywhereOnErl convert
+  unaryFn dicts fns f = convert
     where
     convert :: Erl -> Erl
     convert (EApp (EApp (EApp fn []) [EApp dict' []]) [x]) | isFnName dicts dict' && isFnName fns fn = f x
@@ -167,7 +116,7 @@ inlineCommonOperators effectModule EC.EffectDictionaries{..} =
     convert other = other
 
   inlineNonClassFunction :: (Text, Text) -> (Erl -> Erl -> Erl) -> Erl -> Erl
-  inlineNonClassFunction modFn f = everywhereOnErl convert
+  inlineNonClassFunction modFn f = convert
     where
     convert :: Erl -> Erl
     convert (EApp (EApp op' [x]) [y]) | isModFn modFn op' = f x y
@@ -175,7 +124,7 @@ inlineCommonOperators effectModule EC.EffectDictionaries{..} =
     convert other = other
 
   inlineErlAtom :: Erl -> Erl
-  inlineErlAtom = everywhereOnErl convert
+  inlineErlAtom = convert
     where
     convert :: Erl -> Erl
     convert (EApp op' [EStringLiteral s])
@@ -187,57 +136,127 @@ inlineCommonOperators effectModule EC.EffectDictionaries{..} =
   isModFn :: (Text, Text) -> Erl -> Bool
   isModFn = isFn
 
-  mkFn :: Int -> Erl -> Erl
-  mkFn = mkFn' EC.dataFunctionUncurried C.mkFn $ \args e -> EFunN Nothing args e
+binaryOps :: Erl -> Erl
+binaryOps = convert
+  where
+  convert :: Erl -> Erl
+  convert eapp@(EApp fn [dict', opArg1, opArg2])
+    | (EAtomLiteral (Atom (Just moduleName) fnName)) <- fn
+    , (EApp (EAtomLiteral (Atom (Just dictModuleName) dictName)) []) <- dict'
+    = case Map.lookup ((dictModuleName, dictName), (moduleName, fnName)) binaryOperators of
+        Just op -> EBinary op opArg1 opArg2
+        Nothing -> eapp
+  convert other = other
 
-  mkEffFn :: Int -> Erl -> Erl
-  mkEffFn = mkFn' EC.effectUncurried C.mkEffectFn $ \args e -> EFunN Nothing args (EApp e [])
+unaryOps ::  Erl -> Erl
+unaryOps = convert
+  where
+  convert :: Erl -> Erl
+  convert eapp@(EApp fn [dict', opArg])
+    | (EAtomLiteral (Atom (Just moduleName) fnName)) <- fn
+    , (EApp (EAtomLiteral (Atom (Just dictModuleName) dictName)) []) <- dict'
+    = case Map.lookup ((dictModuleName, dictName), (moduleName, fnName)) unaryOperators of
+        Just op -> EUnary op opArg
+        Nothing -> eapp
+  convert other = other
 
-  mkFn' :: Text -> Text -> ([Text] -> Erl -> Erl) -> Int -> Erl -> Erl
-  mkFn' modName fnName res 0 = convert where
-    convert :: Erl -> Erl
-    convert (EApp mkFnN [EFun1 Nothing _ e]) | isNFn modName fnName 0 mkFnN = res [] e
-    convert other = other
-  mkFn' modName fnName res n = convert where
-    convert :: Erl -> Erl
-    convert (EApp mkFnN [ fn ])
-      | isNFn modName fnName n mkFnN 
-      , Just (args, e) <- collectArgs n [] fn = res args e
-    convert other = other
+onNFn :: Erl -> Erl
+onNFn = convert where
+  convert (EApp mkFnN [EFun1 Nothing _ e])
+    | (EAtomLiteral (Atom (Just mkMod) mkFun)) <- mkFnN
+    , Just (MkFnN 0 res) <- Map.lookup (mkMod, mkFun) fnNs
+    = res [] e
+  convert (EApp mkFnN [ fn ])
+    | (EAtomLiteral (Atom (Just mkMod) mkFun)) <- mkFnN
+    , Just (MkFnN n res) <- Map.lookup (mkMod, mkFun) fnNs
+    , Just (args, e) <- collectArgs n n [] fn 
+    = res args e
+  convert (EApp runFnN (fn : args ))
+    | (EAtomLiteral (Atom (Just runMod) runFun)) <- runFnN
+    , Just (RunFnN n res) <- Map.lookup (runMod, runFun) fnNs
+    , length args == n
+    = res (normaliseRef n fn) args
+  convert other = other
+  
+  collectArgs :: Int -> Int -> [Text] -> Erl -> Maybe ([Text], Erl)
+  collectArgs n 1 acc (EFun1 Nothing arg e) | length acc == n - 1 = Just (reverse (arg : acc), e)
+  collectArgs n m acc (EFun1 Nothing arg e) = collectArgs n (m - 1) (arg : acc) e
+  collectArgs _ _ _   _ = Nothing
 
-    collectArgs :: Int -> [Text] -> Erl -> Maybe ([Text], Erl)
-    collectArgs 1 acc (EFun1 Nothing arg e) | length acc == n - 1 = Just (reverse (arg : acc), e)
-    collectArgs m acc (EFun1 Nothing arg e) = collectArgs (m - 1) (arg : acc) e
-    collectArgs _ _   _ = Nothing
+  normaliseRef n (EFunRef _ arity) | arity /= n = error "Should never see wrong arity here"
+  normaliseRef _ (EFunRef fn _) = EAtomLiteral fn
+  normaliseRef _ other = other
 
-  runFn :: Int -> Erl -> Erl
-  runFn = runFn' EC.dataFunctionUncurried C.runFn EApp
+data FnNRes = MkFnN Int ([Text] -> Erl -> Erl) | RunFnN Int (Erl -> [Erl] -> Erl)
 
-  runEffFn :: Int -> Erl -> Erl
-  runEffFn = runFn' EC.effectUncurried C.runEffectFn $ \fn acc -> EFun0 Nothing (EApp fn acc)
+fnNs :: Map.Map (Text, Text) FnNRes
+fnNs = Map.fromList $
+  [ fn | i <- [0..10], fn <- 
+    [ ( (EC.dataFunctionUncurried, name C.mkFn i), MkFnN i $ \args e -> EFunN Nothing args e )
+    , ( (EC.effectUncurried, name C.mkEffectFn i), MkFnN i $ \args e -> EFunN Nothing args (EApp e []) )
+    ]
+  ] ++
+  [ fn | i <- [1..10], fn <- 
+    [ ( (EC.dataFunctionUncurried, name C.runFn i), RunFnN i EApp )
+    , ( (EC.effectUncurried, name C.runEffectFn i), RunFnN i $ \fn acc -> EFun0 Nothing (EApp fn acc) )
+    ]
+  ]
+  where
+  name prefix n = atomPS $ mkString $ prefix <> T.pack (show n)
 
-  runFn' :: Text -> Text -> (Erl -> [Erl] -> Erl) -> Int -> Erl -> Erl
-  runFn' modName runFnName res n = convert where
-    convert :: Erl -> Erl
-    convert e = fromMaybe e $ go e
+binaryOperators :: Map.Map ((Text, Text), (Text, Text)) BinaryOperator
+binaryOperators = Map.fromList $ (\(Binary (dmod, dfn) (omod, ofn) result) -> (((dmod, atomPS dfn),(omod, atomPS ofn)), result)) <$>
+    [ Binary semiringNumber opAdd Add
+    , Binary semiringNumber opMul Multiply
+    , Binary ringNumber opSub Subtract
+    , Binary semiringInt opAdd Add
+    , Binary semiringInt opMul Multiply
+    , Binary ringInt opSub Subtract
 
-    go :: Erl -> Maybe Erl
-    go (EApp runFnN (fn : args))
-      | isNFn modName runFnName n runFnN
-      , length args == n
-      = Just $ res (normaliseRef fn) args
-    go _ = Nothing
+    , Binary euclideanRingNumber opDiv FDivide
 
-    normaliseRef (EFunRef _ arity) | arity /= n = error "Should never see wrong arity here"
-    normaliseRef (EFunRef fn _) = EAtomLiteral fn
-    normaliseRef other = other
+    , Binary eqNumber opEq IdenticalTo
+    , Binary eqNumber opNotEq NotIdenticalTo
+    , Binary eqInt opEq IdenticalTo
+    , Binary eqInt opNotEq NotIdenticalTo
+    , Binary eqString opEq IdenticalTo
+    , Binary eqString opNotEq NotIdenticalTo
+    , Binary eqChar opEq IdenticalTo
+    , Binary eqChar opNotEq NotIdenticalTo
+    , Binary eqBoolean opEq IdenticalTo
+    , Binary eqBoolean opNotEq NotIdenticalTo
 
-  isNFn :: Text -> Text -> Int -> Erl -> Bool
-  isNFn expectMod prefix n fn
-    | isUncurriedFn (expectMod, name) fn = True
-    where name = mkString $ prefix <> T.pack (show n)
-  isNFn _ _ _ _ = False
-      
+    , Binary ordBoolean opLessThan LessThan
+    , Binary ordBoolean opLessThanOrEq LessThanOrEqualTo
+    , Binary ordBoolean opGreaterThan GreaterThan
+    , Binary ordBoolean opGreaterThanOrEq GreaterThanOrEqualTo
+    , Binary ordChar opLessThan LessThan
+    , Binary ordChar opLessThanOrEq LessThanOrEqualTo
+    , Binary ordChar opGreaterThan GreaterThan
+    , Binary ordChar opGreaterThanOrEq GreaterThanOrEqualTo
+    , Binary ordInt opLessThan LessThan
+    , Binary ordInt opLessThanOrEq LessThanOrEqualTo
+    , Binary ordInt opGreaterThan GreaterThan
+    , Binary ordInt opGreaterThanOrEq GreaterThanOrEqualTo
+    , Binary ordNumber opLessThan LessThan
+    , Binary ordNumber opLessThanOrEq LessThanOrEqualTo
+    , Binary ordNumber opGreaterThan GreaterThan
+    , Binary ordNumber opGreaterThanOrEq GreaterThanOrEqualTo
+    , Binary ordString opLessThan LessThan
+    , Binary ordString opLessThanOrEq LessThanOrEqualTo
+    , Binary ordString opGreaterThan GreaterThan
+    , Binary ordString opGreaterThanOrEq GreaterThanOrEqualTo
+
+    , Binary heytingAlgebraBoolean opConj And
+    , Binary heytingAlgebraBoolean opDisj Or
+    ]
+
+unaryOperators :: Map.Map ((Text, Text), (Text, Text)) UnaryOperator
+unaryOperators = Map.fromList $ (\(Unary (dmod, dfn) (omod, ofn) result) -> (((dmod, atomPS dfn),(omod, atomPS ofn)), result)) <$>
+    [ Unary ringNumber opNegate Negate
+    , Unary ringInt opNegate Negate
+    , Unary heytingAlgebraBoolean opNot Not
+    ]
 
 semiringNumber :: forall a b. (IsString a, IsString b) => (a, b)
 semiringNumber = (EC.dataSemiring, C.semiringNumber)
@@ -273,7 +292,7 @@ ordBoolean :: forall a b. (IsString a, IsString b) => (a, b)
 ordBoolean = (EC.dataOrd, C.ordBoolean)
 
 ordNumber :: forall a b. (IsString a, IsString b) => (a, b)
-ordNumber = (C.dataOrd, C.ordNumber)
+ordNumber = (EC.dataOrd, C.ordNumber)
 
 ordInt :: forall a b. (IsString a, IsString b) => (a, b)
 ordInt = (EC.dataOrd, C.ordInt)
