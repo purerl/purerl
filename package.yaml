@@ -1,5 +1,5 @@
 name: purerl
-version: '0.0.5'
+version: '0.0.6'
 synopsis: PureScript Programming Language Erlang Back-end
 description: Erlang backend for PureScript (a small strongly, statically typed programming language with expressive
   types, inspired by Haskell).
