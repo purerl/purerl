@@ -15,7 +15,6 @@ import           Data.Maybe (catMaybes, mapMaybe, fromMaybe)
 import qualified Data.Map as M
 import Data.Map (Map)
 import qualified Language.PureScript as P
-import qualified Language.PureScript.CoreFn as CoreFn
 import qualified Language.PureScript.CoreFn.FromJSON as CoreFn
 import qualified Options.Applicative as Opts
 import qualified System.Console.ANSI as ANSI
@@ -39,13 +38,10 @@ import           Language.PureScript.Erl.Errors as E
 import           Language.PureScript.Erl.Errors.JSON
 import           Control.Monad.Supply
 import           Language.PureScript.Erl.Run (runProgram)
-import           Control.Monad.Trans.Class (MonadTrans(..))
 import Data.Time.Clock (UTCTime)
 
 import qualified Data.HashMap.Strict as HashMap
-import Text.Printf
-import qualified Data.Vector as Vector
-import GHC.Generics
+import GHC.Generics (Generic)
 
 data BuildOptions = BuildOptions
   { buildOutputDir    :: FilePath
@@ -73,8 +69,6 @@ compile BuildOptions{..} = do
     exitFailure
   (makeErrors, makeWarnings) <- MM.runMake P.defaultOptions $ do
     cache <- fromMaybe M.empty <$> MM.readJSONFile cacheDbFile
-    let z :: CacheDb
-        z  = cache
     modules <- forM corefnFiles $ \corefn -> do
       let extern = replaceFileName corefn "externs.json"
       let modStr = last $ FP.splitPath $ FP.takeDirectory corefn
@@ -131,7 +125,7 @@ compile BuildOptions{..} = do
             | Just (_version, module') <- parseMaybe CoreFn.moduleFromJSON coreFn' -> do
             _ <- runSupplyT 0 $ Make.codegen buildActions module'
             Make.ffiCodegen buildActions module'
-          Nothing -> do
+          _ -> do
             liftIO $ hPutStrLn stderr $ "Error parsing corefn: " <> T.unpack (P.runModuleName moduleName)
             pure ()
 
@@ -179,13 +173,6 @@ compile BuildOptions{..} = do
                 (either (toJSONErrors verbose E.Error) (const []) errors)
     either (const exitFailure) (const (return ())) errors
 
-  getModuleName ::  Value -> Maybe P.ModuleName
-  getModuleName corefn =
-    case corefn of
-      Object o | Just (Array filenames) <- HashMap.lookup "moduleName" o -> 
-        Just $ P.ModuleName $ Vector.toList $ (\(String s) -> P.ProperName s) <$> filenames
-      _ -> Nothing
-
   getModulePath :: Value -> Maybe FilePath
   getModulePath corefn =
     case corefn of
@@ -219,8 +206,6 @@ catchDoesNotExist inner = do
       return Nothing
     Right x ->
       return (Just x)
-
-tdiff before after = ((fromIntegral (after - before)) / (10^12)) :: Double
 
 warnFileTypeNotFound :: String -> IO ()
 warnFileTypeNotFound = hPutStrLn stderr . ("purs compile: No files found using pattern: " ++)
