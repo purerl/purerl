@@ -30,8 +30,6 @@ import           Language.PureScript.Erl.Pretty (prettyPrintErl)
 import           Language.PureScript.Erl.Errors
 import           Language.PureScript.Erl.Errors.Types
 
-
-
 data MakeActions m = MakeActions
   { codegen :: CF.Module CF.Ann -> SupplyT m ()
   -- ^ Run the code generator for the module and write any required output files.
@@ -60,12 +58,13 @@ buildActions outputDir env foreigns usePrefix =
       Just path
         | not $ requiresForeign m ->
             return []
-        | otherwise -> getForeigns path
+        | otherwise ->
+            getForeigns path
       Nothing ->
         return []
 
     (exports, rawErl) <- moduleToErl env m foreignExports
-    optimized <- traverse optimize rawErl 
+    optimized <- traverse optimize rawErl
     dir <- lift $ makeIO "get file info: ." getCurrentDirectory
     let makeAbsFile file = dir </> file
     let pretty = prettyPrintErl (makeAbsFile :: String -> String) optimized

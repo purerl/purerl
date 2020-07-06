@@ -74,9 +74,9 @@ dependencies:
   - transformers >=0.3.0 && <0.6
   - transformers-base >=0.4.0 && <0.5
   - transformers-compat >=0.3.0
-  # - unordered-containers
+  - unordered-containers
   - utf8-string >=1 && <2
-  # - vector
+  - vector
 build-tools:
   - happy ==1.19.9
 

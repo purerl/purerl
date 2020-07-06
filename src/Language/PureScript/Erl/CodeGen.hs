@@ -100,8 +100,6 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
     res <- traverse topBindToErl decls
     reexports <- traverse reExportForeign foreigns
     let (exports, erlDecls) = biconcat $ res <> reexports
-    optimized <- traverse optimize erlDecls
-    -- let optimized = erlDecls
 
     traverse_ checkExport foreigns
     let usedFfi = Set.fromList $ map runIdent foreigns
@@ -112,7 +110,7 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
 
     let attributes = findAttributes decls
 
-    return (map (\(a,i) -> runAtom a <> "/" <> T.pack (show i)) exports, attributes ++ optimized)
+    return (map (\(a,i) -> runAtom a <> "/" <> T.pack (show i)) exports, attributes ++ erlDecls)
   where
 
   types :: M.Map (Qualified Ident) SourceType
