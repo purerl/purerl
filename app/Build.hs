@@ -6,9 +6,9 @@
 {-# LANGUAGE NamedFieldPuns #-}
 
 
-
 module Build (parser) where
 
+import Prelude
 import           Control.Exception (tryJust)
 import           Control.Monad
 import           Data.Maybe (catMaybes, mapMaybe, fromMaybe)
@@ -70,18 +70,18 @@ compile BuildOptions{..} = do
   (makeErrors, makeWarnings) <- MM.runMake P.defaultOptions $ do
     cache <- fromMaybe M.empty <$> MM.readJSONFile cacheDbFile
     modules <- forM corefnFiles $ \corefn -> do
-      let extern = replaceFileName corefn "externs.json"
+      let extern = replaceFileName corefn "externs.cbor"
       let modStr = last $ FP.splitPath $ FP.takeDirectory corefn
-      let moduleName' = P.ModuleName $ P.ProperName <$> T.splitOn "." (T.pack modStr)
+      let moduleName' = P.ModuleName $ T.pack modStr
 
       -- Aeson JSON handling is lazy, but if we evaluate the outer Maybe Value we incur the
       -- cost of constructing the big top-level object even if we don't look at it
       res <- readJSONFile corefn
-      resExterns <- MM.readJSONFile extern
+      resExterns <- MM.readExternsFile extern
 
       case resExterns of
         Just resExterns' -> do
-          when (not $ P.externsIsCurrentVersion resExterns') $
+          unless (P.externsIsCurrentVersion resExterns') $
             liftIO $ hPutStrLn stderr $ "Found externs for wrong compiler version (continuing anyway): " <> extern
           let fromCorefn = case res of
                             Just res' -> do
@@ -93,7 +93,7 @@ compile BuildOptions{..} = do
                               liftIO $ hPutStrLn stderr $ "Error parsing corefn: " <> corefn
                               pure Nothing
           case M.lookup moduleName' cache of
-            Just (CacheInfo { sourceFile = sourceFile }) -> do
+            Just CacheInfo { sourceFile = sourceFile } -> do
               exists <- liftIO $ doesFileExist sourceFile
               if exists then do
                 foreignFile <- liftIO $ inferForeignModule' sourceFile
@@ -102,11 +102,11 @@ compile BuildOptions{..} = do
               else
                 fromCorefn
             Nothing -> fromCorefn
-              
+
         Nothing -> do
           liftIO $ hPutStrLn stderr $ "Error parsing externs: " <> extern
           pure Nothing
-      
+
     let modules' = catMaybes modules
         foreigns = M.fromList $ mapMaybe (\ModResult{ moduleName, foreignFile} -> (moduleName,) <$> foreignFile) modules'
         env = foldr P.applyExternsFileToEnvironment P.initEnvironment $ map externs modules'
@@ -130,21 +130,21 @@ compile BuildOptions{..} = do
             pure ()
 
 
-  printWarningsAndErrors False False makeWarnings makeErrors 
+  printWarningsAndErrors False False makeWarnings makeErrors
 
   case buildRun of
     Nothing -> pure ()
     Just runModule -> runProgram $ T.pack runModule
-  
+
   exitSuccess
   where
 
   latestInputTimestamp corefn extern foreignFile = do
     sourceTime <- max <$> MM.getTimestamp corefn <*> MM.getTimestamp extern
-    case foreignFile of 
+    case foreignFile of
       Just ff -> max <$> MM.getTimestamp ff <*> pure sourceTime
       Nothing -> pure sourceTime
-          
+
 
   needsBuild buildActions ts m = do
     outputTs <- Make.getOutputTimestamp buildActions m
@@ -152,7 +152,7 @@ compile BuildOptions{..} = do
       Nothing -> True
       Just outTs | outTs < ts -> True
       _ -> False
-    
+
 
   -- | Arguments: verbose, use JSON, warnings, errors
   printWarningsAndErrors :: Bool -> Bool -> MultipleErrors -> Either MultipleErrors a -> IO ()

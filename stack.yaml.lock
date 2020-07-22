@@ -40,12 +40,19 @@ packages:
   original:
     hackage: semialign-1
 - completed:
-    hackage: purescript-0.13.6@sha256:4c17cdc0e8d51bb79f6fd3dd2beeda30dcf7297a76bbe3a37a49924e95d2b4fc,62060
+    hackage: purescript-0.13.8@sha256:4ab02b2d01d8bb27c5a854080a1a7c962fa544e42df804a8047972a6bbc396c6,58391
     pantry-tree:
-      size: 95494
-      sha256: afbab4292ca1243d0d52fd32ec48f8261ffb7f91c40922dd637688a700df88e9
+      size: 87513
+      sha256: 1a2a1581d8fbc0371bcfebf1b4f0ba0f452b2a7e5a5115055ca5d49cacfe2e2b
   original:
-    hackage: purescript-0.13.6
+    hackage: purescript-0.13.8
+- completed:
+    hackage: serialise-0.2.2.0@sha256:6e8b89f437009ab30297a57de1a4bf2e3da5e5a086b96bf5cc278bdb7178f097,8356
+    pantry-tree:
+      size: 4056
+      sha256: 97702981cdfe830fca6d258341b9773272400e475165689548f56da83eff2778
+  original:
+    hackage: serialise-0.2.2.0
 snapshots:
 - completed:
     size: 499889

@@ -2,6 +2,8 @@
 
 module Main where
 
+import Prelude
+
 import           System.Environment (getArgs)
 import qualified System.IO as IO
 import           System.IO (IO)

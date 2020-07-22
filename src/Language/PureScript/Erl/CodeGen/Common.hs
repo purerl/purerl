@@ -19,7 +19,7 @@ module Language.PureScript.Erl.CodeGen.Common
 
 import Prelude.Compat hiding (all)
 import Data.Char
-import Data.Text (Text, intercalate, uncons, cons, singleton, all, pack, singleton)
+import Data.Text (Text, uncons, cons, singleton, all, pack, singleton)
 import qualified Data.Text as T
 import Data.Word (Word16)
 import Data.Monoid ((<>))
@@ -103,13 +103,14 @@ atom s
 data ModuleType = ForeignModule | PureScriptModule
 
 atomModuleName :: ModuleName -> ModuleType -> Text
-atomModuleName mn mt = erlModuleName mn mt
+atomModuleName = erlModuleName
 
 erlModuleName :: ModuleName -> ModuleType -> Text
-erlModuleName (ModuleName pns) moduleType = intercalate "_" ((toAtomName . runProperName) `map` pns) <>
-  case moduleType of
-    ForeignModule -> "@foreign"
-    PureScriptModule -> "@ps"
+erlModuleName (ModuleName name) moduleType =
+  T.intercalate "_" (toAtomName <$> T.splitOn "." name) <>
+    case moduleType of
+      ForeignModule -> "@foreign"
+      PureScriptModule -> "@ps"
 
 toAtomName :: Text -> Text
 toAtomName text = case uncons text of

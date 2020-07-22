@@ -56,7 +56,7 @@ runProgram runModule =
     else 
       case splitAt (length split - 1) split of
         (modules, [ident]) -> 
-          let mn = P.ModuleName $ map P.ProperName modules
+          let mn = P.ModuleName $ T.intercalate "." modules
           in
           Just $ P.Qualified (Just mn) (P.Ident ident)
         _ -> Nothing

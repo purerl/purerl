@@ -1,5 +1,5 @@
 name: purerl
-version: '0.0.6'
+version: '0.0.7'
 synopsis: PureScript Programming Language Erlang Back-end
 description: Erlang backend for PureScript (a small strongly, statically typed programming language with expressive
   types, inspired by Haskell).
@@ -64,6 +64,7 @@ dependencies:
   # - semigroups >=0.16.2 && <0.19
   # - semialign >=1 && <1.1
   # - sourcemap >=0.1.6
+  - serialise
   # - split
   # - stm >=0.2.4.0
   # - stringsearch
@@ -84,28 +85,6 @@ library:
   source-dirs: src
   ghc-options: -Wall -O2
   # other-modules: Paths_purescript
-  default-extensions:
-    - ConstraintKinds
-    - DataKinds
-    - DeriveFunctor
-    - DeriveFoldable
-    - DeriveTraversable
-    - DeriveGeneric
-    - DerivingStrategies
-    - EmptyDataDecls
-    - FlexibleContexts
-    - KindSignatures
-    - LambdaCase
-    - MultiParamTypeClasses
-    - NoImplicitPrelude
-    - PatternGuards
-    - PatternSynonyms
-    - RankNTypes
-    - RecordWildCards
-    - OverloadedStrings
-    - ScopedTypeVariables
-    - TupleSections
-    - ViewPatterns
 
 executables:
   purerl:
@@ -131,6 +110,29 @@ executables:
       else:
         dependencies:
         - gitrev >=1.2.0 && <1.4
+
+default-extensions:
+  - ConstraintKinds
+  - DataKinds
+  - DeriveFunctor
+  - DeriveFoldable
+  - DeriveTraversable
+  - DeriveGeneric
+  - DerivingStrategies
+  - EmptyDataDecls
+  - FlexibleContexts
+  - KindSignatures
+  - LambdaCase
+  - MultiParamTypeClasses
+  - NoImplicitPrelude
+  - PatternGuards
+  - PatternSynonyms
+  - RankNTypes
+  - RecordWildCards
+  - OverloadedStrings
+  - ScopedTypeVariables
+  - TupleSections
+  - ViewPatterns
 
 flags:
   release:

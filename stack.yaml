@@ -8,7 +8,8 @@ extra-deps:
 - network-3.0.1.1
 - these-1.0.1
 - semialign-1
-- purescript-0.13.6
+- purescript-0.13.8
+- serialise-0.2.2.0
 flags:
   aeson-pretty:
     lib-only: true

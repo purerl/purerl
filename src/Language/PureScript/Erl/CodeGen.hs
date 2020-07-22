@@ -79,10 +79,10 @@ uncurriedFnArity moduleName fnName = go (-1)
     go _ _ = Nothing
 
 effectUncurried :: ModuleName
-effectUncurried = ModuleName [ ProperName "Effect", ProperName "Uncurried" ]
+effectUncurried = ModuleName "Effect.Uncurried"
 
 dataFunctionUncurried :: ModuleName
-dataFunctionUncurried = ModuleName [ ProperName "Data", ProperName "Function", ProperName "Uncurried" ]
+dataFunctionUncurried = ModuleName "Data.Function.Uncurried"
 
 -- |
 -- Generate code in the simplified Erlang intermediate representation for all declarations in a
@@ -326,7 +326,7 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
   valueToErl' :: Maybe Ident -> Expr Ann -> m Erl
   valueToErl' _ (Literal (pos, _, _, _) l) =
     rethrowWithPosition pos $ literalToValueErl l
-  valueToErl' _ (Var _ (Qualified (Just (ModuleName [ProperName prim])) (Ident undef))) | prim == C.prim, undef == C.undefined =
+  valueToErl' _ (Var _ (Qualified (Just C.Prim) (Ident undef))) | undef == C.undefined =
     return $ EAtomLiteral $ Atom Nothing C.undefined
   valueToErl' _ (Var _ ident) | isTopLevelBinding ident = pure $
     case M.lookup ident arities of
