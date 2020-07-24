@@ -6,7 +6,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 
 
-module Build (parser) where
+module Build (parser, compile, compile', BuildOptions(..)) where
 
 import Prelude
 import           Control.Exception (tryJust)
@@ -15,6 +15,7 @@ import           Data.Maybe (catMaybes, mapMaybe, fromMaybe)
 import qualified Data.Map as M
 import Data.Map (Map)
 import qualified Language.PureScript as P
+import qualified Language.PureScript.CoreFn as CoreFn
 import qualified Language.PureScript.CoreFn.FromJSON as CoreFn
 import qualified Options.Applicative as Opts
 import qualified System.Console.ANSI as ANSI
@@ -44,8 +45,9 @@ import qualified Data.HashMap.Strict as HashMap
 import GHC.Generics (Generic)
 
 data BuildOptions = BuildOptions
-  { buildOutputDir    :: FilePath
+  { buildOutputDir    :: FilePath 
   , buildRun          :: Maybe String
+  , buildQuiet        :: Bool
   }
 
 data ModResult = ModResult
@@ -58,7 +60,12 @@ data ModResult = ModResult
   }
 
 compile :: BuildOptions -> IO ()
-compile BuildOptions{..} = do
+compile opts = do
+  _ <- compile' opts
+  exitSuccess
+
+compile' :: BuildOptions -> IO (Maybe [CoreFn.Module CoreFn.Ann])
+compile' BuildOptions{..} = do
   let coreFnGlob = joinPath [ buildOutputDir, "*", "corefn.json" ]
       cacheDbFile = joinPath [ buildOutputDir, "purerl-cache-db.json" ]
   corefnFiles <- globWarningOnMisses warnFileTypeNotFound [coreFnGlob]
@@ -116,19 +123,23 @@ compile BuildOptions{..} = do
         newCache = M.fromList $ map (\ModResult { moduleName, modulePath} -> (moduleName, CacheInfo modulePath M.empty)) modules'
     MM.writeJSONFile cacheDbFile newCache
 
-    forM_ modules' $ \ModResult{ moduleName, coreFn, inputTimestamp} -> do
+    res <- forM modules' $ \ModResult{ moduleName, coreFn, inputTimestamp} -> do
       shouldBuild <- needsBuild buildActions inputTimestamp moduleName
-      when shouldBuild $ do
-        liftIO $ hPutStrLn stderr $ "Building " <> T.unpack (P.runModuleName moduleName)
+      if shouldBuild then do
+        unless buildQuiet $
+          liftIO $ hPutStrLn stderr $ "Building " <> T.unpack (P.runModuleName moduleName)
         case coreFn of
           Just coreFn'
             | Just (_version, module') <- parseMaybe CoreFn.moduleFromJSON coreFn' -> do
             _ <- runSupplyT 0 $ Make.codegen buildActions module'
             Make.ffiCodegen buildActions module'
+            pure $ Just module'
           _ -> do
             liftIO $ hPutStrLn stderr $ "Error parsing corefn: " <> T.unpack (P.runModuleName moduleName)
-            pure ()
-
+            pure Nothing
+      else 
+        pure Nothing
+    pure $ catMaybes res
 
   printWarningsAndErrors False False makeWarnings makeErrors
 
@@ -136,7 +147,8 @@ compile BuildOptions{..} = do
     Nothing -> pure ()
     Just runModule -> runProgram $ T.pack runModule
 
-  exitSuccess
+  pure $ either (const Nothing) Just makeErrors
+
   where
 
   latestInputTimestamp corefn extern foreignFile = do
@@ -155,7 +167,7 @@ compile BuildOptions{..} = do
 
 
   -- | Arguments: verbose, use JSON, warnings, errors
-  printWarningsAndErrors :: Bool -> Bool -> MultipleErrors -> Either MultipleErrors a -> IO ()
+  printWarningsAndErrors :: forall a. Bool -> Bool -> MultipleErrors -> Either MultipleErrors a -> IO ()
   printWarningsAndErrors verbose False warnings errors = do
     pwd <- getCurrentDirectory
     cc <- bool Nothing (Just P.defaultCodeColor) <$> ANSI.hSupportsANSI stderr
@@ -232,10 +244,17 @@ run = Opts.optional $ Opts.strOption $
     Opts.long "run"
     <> Opts.help "Run the given function"
 
+quiet :: Opts.Parser Bool
+quiet = Opts.flag False True $
+    Opts.short 'q'
+    <> Opts.long "quiet"
+    <> Opts.help "Print less output"
+
 
 buildOptions :: Opts.Parser BuildOptions
 buildOptions = BuildOptions <$> outputDirectory
                             <*> run
+                            <*> quiet
                             -- <*> (not <$> noPrefix)
                             -- <*> jsonErrors
 

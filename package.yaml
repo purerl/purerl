@@ -43,7 +43,7 @@ dependencies:
   - filepath
   # - fsnotify >=0.2.1
   - Glob >=0.9 && <0.10
-  # - haskeline >=0.7.0.0
+  - haskeline >=0.7.0.0  && <0.8.0.0
   # - language-javascript >=0.7.0.0
   # - lifted-async >=0.10.0.3 && <0.10.1
   # - lifted-base >=0.2.3 && <0.2.4
@@ -66,7 +66,7 @@ dependencies:
   # - sourcemap >=0.1.6
   - serialise
   # - split
-  # - stm >=0.2.4.0
+  - stm >=0.2.4.0
   # - stringsearch
   # - syb
   - text

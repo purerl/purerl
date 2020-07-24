@@ -9,8 +9,10 @@ import qualified System.IO as IO
 import           System.IO (IO)
 import qualified Options.Applicative as Opts
 import qualified Text.PrettyPrint.ANSI.Leijen as Doc
-import qualified Build as Build
+import qualified Build
+import qualified Command.REPL as REPL
 import           Version (versionString)
+import Control.Applicative
 
 main :: IO ()
 main = do
@@ -45,5 +47,10 @@ main = do
     versionInfo = Opts.abortOption (Opts.InfoMsg versionString) $
       Opts.long "version" <> Opts.help "Show the version number" <> Opts.hidden
 
+    repl = Opts.flag' () $
+      Opts.long "repl" <> Opts.help "Run REPL" <> Opts.hidden
+
+
     optsParser :: Opts.Parser (IO ())
-    optsParser = Build.parser
+    optsParser =
+      Build.parser <|> (repl *> REPL.command)
