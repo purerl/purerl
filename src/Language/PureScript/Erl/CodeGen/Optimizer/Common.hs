@@ -103,7 +103,7 @@ replaceIdents vars = go where
 
   go (EUnary op e) = f $ EUnary op (go e)
   go (EBinary op e1 e2) = f $ EBinary op (go e1) (go e2)
-  go (EFunctionDef ssann a ss e) = f $ EFunctionDef ssann a ss (go e)
+  go (EFunctionDef t ssann a ss e) = f $ EFunctionDef t ssann a ss (go e)
   go (EVarBind x e) = f $ EVarBind x (go e)
   go (EApp e es) = f $ EApp (go e) (map go es)
   go (EBlock es) = f $ EBlock (map go es)

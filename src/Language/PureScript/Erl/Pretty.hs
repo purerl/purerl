@@ -59,7 +59,7 @@ literals = mkPattern' match
     , prettyPrintErl' e
     ]
 
-  match (EFunctionDef ss x xs e) = mconcat <$> sequence (
+  match (EFunctionDef t ss x xs e) = mconcat <$> sequence (
     (case ss of
       (Just SourceSpan { spanName = spanName, spanStart = spanStart }) -> 
         [ do 
@@ -68,9 +68,32 @@ literals = mkPattern' match
         ]
       _ -> [])
     <>
+    printFunTy t
+    <>
     [ return $ emit $ runAtom x <> "(" <> intercalate "," xs <> ") -> "
     , prettyPrintErl' e
     ])
+    where
+      printFunTy (Just (TFun ts ty)) =
+        [ return $ emit $ "-spec " <> runAtom x <> "(" <> (T.intercalate "," $ printTy <$> ts) <> ") -> " <> printTy ty <> ".\n" ]
+      printFunTy _ = []
+
+      printTy TAny = "any()"
+      printTy TNone = "none()"
+      printTy TPid = "pid()"
+      printTy TPort = "port()"
+      printTy TReference = "reference()"
+      printTy TNil = "[]"
+      printTy TInteger = "integer()"
+      
+      printTy (TFun ts t) = "fun((" <> (T.intercalate "," $ printTy <$> ts) <> ") -> " <> printTy t <> ")"
+      printTy TFloat = "float()"
+      printTy (TAlias alias) = alias <> "()"
+      printTy (TAtom Nothing) = "atom()"
+      printTy (TAtom (Just atom)) = atom
+
+      
+      printTy _ = "any()"
 
   match (EVar x) = return $ emit x
 

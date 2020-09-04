@@ -219,7 +219,11 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
     -- Always generate the plain curried form, f x y = ... -~~> f() -> fun (X) -> fun (Y) -> ... end end.
     let qident = Qualified (Just mn) ident
     erl <- valueToErl val
-    let curried = ( [ (ident', 0) ], [ EFunctionDef ss ident' [] (outerWrapper erl) ] )
+
+    let erlangType = translateType <$> M.lookup qident types
+
+
+    let curried = ( [ (ident', 0) ], [ EFunctionDef (TFun [] <$> erlangType) ss ident' [] (outerWrapper erl) ] )
     -- For effective > 0 (either plain curried funs, FnX or EffectFnX) generate an uncurried overload
     -- f x y = ... -~~> f(X,Y) -> ((...)(X))(Y).
     -- Relying on inlining to clean up some junk here
@@ -229,18 +233,37 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
           _ | Just n <- fnArity qident -> (mkRunApp dataFunctionUncurried C.runFn n, id)
           _ -> (id, id)
 
+
     uncurried <- case effFnArity qident <|> fnArity qident <|> M.lookup qident arities of
       Just arity | arity > 0 -> do
         vars <- replicateM arity freshNameErl
         -- Apply in CoreFn then translate to take advantage of translation of full/partial application
         erl' <- valueToErl $ foldl (\fn a -> App eann fn (Var eann (Qualified Nothing (Ident a)))) (wrap val) vars
-        pure ( [ (ident', arity) ], [ EFunctionDef ss ident' vars (outerWrapper (unwrap erl')) ] )
+        pure ( [ (ident', arity) ], [ EFunctionDef (uncurryType arity =<< erlangType) ss ident' vars (outerWrapper (unwrap erl')) ] )
       _ -> pure ([], [])
 
     let res = curried <> uncurried
     pure $ if ident `Set.member` declaredExportsSet 
             then res
             else ([], snd res)
+
+  translateType :: SourceType -> EType
+  translateType (TypeApp _ (TypeApp _ fn t1) t2) | fn == E.tyFunction = TFun [ translateType t1 ] (translateType t2)
+  translateType ty | ty == E.tyInt = TInteger
+  translateType ty | ty == E.tyNumber = TFloat
+  translateType ty | ty == E.tyString = TAlias "binary"
+  translateType ty | ty == E.tyBoolean = TAlias "boolean"
+
+  translateType _ = TAny
+
+  uncurryType :: Int -> EType -> Maybe EType
+  uncurryType arity = uc []
+    where 
+      uc ts (TFun [ t1 ] t2) = uc (t1:ts) t2
+      uc ts t | length ts == arity = Just $ TFun (reverse ts) t
+      uc _ _ = Nothing
+      
+
 
   findApps :: Bind Ann -> M.Map (Qualified Ident) Int -> M.Map (Qualified Ident) Int
   findApps (NonRec _ _ val) apps = findApps' val apps
