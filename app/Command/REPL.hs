@@ -24,7 +24,6 @@ import           Language.PureScript.Erl.Interactive
 
 import qualified Options.Applicative as Opts
 import           System.Console.Haskeline
-import           System.IO
 import           System.IO.UTF8 (readUTF8File)
 import           System.Exit
 import           System.Directory (doesFileExist, getCurrentDirectory, createDirectoryIfMissing)
@@ -32,8 +31,6 @@ import           System.FilePath ((</>))
 import           System.FilePath.Glob (glob)
 import           System.Process (readProcessWithExitCode)
 
-import           Data.Text (Text)
-import qualified Data.Text as T
 import           Build as Build
 
 

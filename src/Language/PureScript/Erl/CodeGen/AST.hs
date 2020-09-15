@@ -273,7 +273,7 @@ data EType
   | TInteger -- no ranges
   | TList EType -- no improper lists
   -- maps
-  | TMap (Maybe [(EType, EType)])
+  | TMap (Maybe [(EType, EType)]) 
   -- tuples
   -- unions
   | TRemote Text Text [EType]

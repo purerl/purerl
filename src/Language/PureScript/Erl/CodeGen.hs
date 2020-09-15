@@ -36,7 +36,7 @@ import Language.PureScript.Errors (ErrorMessageHint(..))
 import Language.PureScript.Options
 import Language.PureScript.Names
 import Language.PureScript.Types
-import Language.PureScript.Label
+import Language.PureScript.Label 
 import Language.PureScript.Environment as E
 import qualified Language.PureScript.Constants as C
 import Language.PureScript.Traversals (sndM)
@@ -273,12 +273,12 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
   translateType (TypeApp _ t1 t2) | t1 == E.tyArray = TRemote "array" "array" [translateType t2]
   translateType (TypeApp _ t1 t2) | t1 == ctorTy erlDataList "List" = TList $ translateType t2
   translateType (TypeApp _ (TypeApp _ t t1) t2) | t == ctorTy erlDataMap "Map" = TMap (Just [(translateType t1, translateType t2)])
-  translateType (TypeApp _ t1 t2) | t1 == ctorTy effect "Effect" = TFun [] $ translateType t1
+  translateType (TypeApp _ t1 t2) | t1 == ctorTy effect "Effect" = TFun [] $ translateType t2
   
-  translateType (TypeApp _ t t1) | t == tyRecord = TMap $ Just $ row t1
+  translateType (TypeApp _ tr t1) | tr == tyRecord = TMap $ Just $ row t1
     where
       row (REmpty _) = []
-      row (RCons _ label t tail) = (TAtom $ Just $ atomPS $ runLabel label, translateType t) : row tail
+      row (RCons _ label t ttail) = (TAtom $ Just $ atomPS $ runLabel label, translateType t) : row ttail
       row _ = error "Shouldn't find random type in row list"
 
   translateType (ForAll _ _ _ ty _) = translateType ty
@@ -299,7 +299,7 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
   translateType _ = TAny
 
   ctorTy :: ModuleName -> T.Text -> SourceType
-  ctorTy mn fn = (TypeConstructor nullSourceAnn (Qualified (Just mn) (ProperName fn)))
+  ctorTy modName fn = (TypeConstructor nullSourceAnn (Qualified (Just modName) (ProperName fn)))
 
   uncurryType :: Int -> EType -> Maybe EType
   uncurryType arity = uc []

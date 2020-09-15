@@ -63,8 +63,8 @@ literals = mkPattern' match
     (case ss of
       (Just SourceSpan { spanName = spanName, spanStart = spanStart }) -> 
         [ do 
-            t <- transformFilename <$> get
-            return $ emit $ "-file(\"" <> T.pack (t spanName) <> "\", " <> T.pack (show $ sourcePosLine spanStart) <> ").\n"
+            tf <- transformFilename <$> get
+            return $ emit $ "-file(\"" <> T.pack (tf spanName) <> "\", " <> T.pack (show $ sourcePosLine spanStart) <> ").\n"
         ]
       _ -> [])
     <>
@@ -86,15 +86,15 @@ literals = mkPattern' match
       printTy TNil = "[]"
       printTy TInteger = "integer()"
       
-      printTy (TFun ts t) = "fun((" <> (T.intercalate "," $ printTy <$> ts) <> ") -> " <> printTy t <> ")"
+      printTy (TFun ts tf) = "fun((" <> (T.intercalate "," $ printTy <$> ts) <> ") -> " <> printTy tf <> ")"
       printTy TFloat = "float()"
       printTy (TAlias alias) = alias <> "()"
       printTy (TAtom Nothing) = "atom()"
       printTy (TAtom (Just a)) = a
-      printTy (TList t) = "list(" <> printTy t <> ")"
+      printTy (TList ts) = "list(" <> printTy ts <> ")"
       printTy (TMap Nothing) = "map()"
       printTy (TMap (Just ts)) = "#{"<> (T.intercalate "," $ (\(t1, t2) -> printTy t1 <> " => " <> printTy t2) <$> ts ) <> "}"
-      printTy (TRemote mod tyname tys) = mod <> ":" <> tyname <> "(" <> T.intercalate "," (printTy <$> tys) <> ")"
+      printTy (TRemote tymod tyname  tys) = tymod <> ":" <> tyname <> "(" <> T.intercalate "," (printTy <$> tys) <> ")"
 
       printTy _ = "any()"
 

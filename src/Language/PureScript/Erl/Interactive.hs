@@ -42,7 +42,6 @@ import           Language.PureScript.Interactive.Printer      as Interactive
 import           Language.PureScript.Interactive.Types        as Interactive
 
 import           System.Directory (getCurrentDirectory)
-import           System.FilePath ((</>))
 import           System.FilePath.Glob (glob)
 
 -- | Pretty-print errors
