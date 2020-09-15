@@ -273,9 +273,10 @@ data EType
   | TInteger -- no ranges
   | TList EType -- no improper lists
   -- maps
+  | TMap (Maybe [(EType, EType)])
   -- tuples
   -- unions
-  -- user defined
+  | TRemote Text Text [EType]
   | TAlias Text
   deriving (Show, Eq)
 

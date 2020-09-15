@@ -36,10 +36,11 @@ import Language.PureScript.Errors (ErrorMessageHint(..))
 import Language.PureScript.Options
 import Language.PureScript.Names
 import Language.PureScript.Types
+import Language.PureScript.Label
 import Language.PureScript.Environment as E
 import qualified Language.PureScript.Constants as C
 import Language.PureScript.Traversals (sndM)
-import Language.PureScript.AST (SourceSpan, nullSourceSpan)
+import Language.PureScript.AST (SourceSpan, nullSourceSpan, nullSourceAnn)
 
 import Language.PureScript.Erl.Errors.Types
 import Language.PureScript.Erl.Errors (MultipleErrors, rethrow, rethrowWithPosition, addHint, errorMessage)
@@ -67,22 +68,38 @@ tyArity (ForAll _ _ _ ty _) = tyArity ty
 tyArity (ConstrainedType _ _ ty) = 1 + tyArity ty 
 tyArity _ = 0
 
-uncurriedFnArity :: ModuleName -> T.Text -> SourceType -> Maybe Int
-uncurriedFnArity moduleName fnName = go (-1)
+uncurriedFnTypes :: ModuleName -> T.Text -> SourceType -> Maybe (Int,[SourceType])
+uncurriedFnTypes moduleName fnName = go []
   where
-    go :: Int -> SourceType -> Maybe Int
-    go n (TypeConstructor _ (Qualified (Just mn) (ProperName fnN)))
-      | n >= 1, n <= 10, fnN == (fnName <> T.pack (show n)), mn == moduleName
-      = Just n
-    go n (TypeApp _ t1 _) = go (n+1) t1
-    go n (ForAll _ _ _ ty _) = go n ty
+    go :: [SourceType] -> SourceType -> Maybe (Int, [SourceType])
+    go acc (TypeConstructor _ (Qualified (Just mn) (ProperName fnN)))
+      | n <- length acc - 1
+      , n >= 1, n <= 10, fnN == (fnName <> T.pack (show n)), mn == moduleName
+      = Just (n, reverse acc)
+    go acc (TypeApp _ t1 t2) = go (t2:acc) t1
+    go acc (ForAll _ _ _ ty _) = go acc ty
     go _ _ = Nothing
+
+
+
+uncurriedFnArity :: ModuleName -> T.Text -> SourceType -> Maybe Int
+uncurriedFnArity moduleName fnName ty = fst <$> uncurriedFnTypes moduleName fnName ty
+
+effect :: ModuleName
+effect = ModuleName "Effect"
 
 effectUncurried :: ModuleName
 effectUncurried = ModuleName "Effect.Uncurried"
 
 dataFunctionUncurried :: ModuleName
 dataFunctionUncurried = ModuleName "Data.Function.Uncurried"
+
+erlDataList :: ModuleName
+erlDataList = ModuleName "Erl.Data.List"
+
+erlDataMap :: ModuleName
+erlDataMap = ModuleName "Erl.Data.Map"
+
 
 -- |
 -- Generate code in the simplified Erlang intermediate representation for all declarations in a
@@ -253,12 +270,41 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
   translateType ty | ty == E.tyNumber = TFloat
   translateType ty | ty == E.tyString = TAlias "binary"
   translateType ty | ty == E.tyBoolean = TAlias "boolean"
+  translateType (TypeApp _ t1 t2) | t1 == E.tyArray = TRemote "array" "array" [translateType t2]
+  translateType (TypeApp _ t1 t2) | t1 == ctorTy erlDataList "List" = TList $ translateType t2
+  translateType (TypeApp _ (TypeApp _ t t1) t2) | t == ctorTy erlDataMap "Map" = TMap (Just [(translateType t1, translateType t2)])
+  translateType (TypeApp _ t1 t2) | t1 == ctorTy effect "Effect" = TFun [] $ translateType t1
+  
+  translateType (TypeApp _ t t1) | t == tyRecord = TMap $ Just $ row t1
+    where
+      row (REmpty _) = []
+      row (RCons _ label t tail) = (TAtom $ Just $ atomPS $ runLabel label, translateType t) : row tail
+      row _ = error "Shouldn't find random type in row list"
 
+  translateType (ForAll _ _ _ ty _) = translateType ty
+  translateType (ConstrainedType _ _ ty) = TFun [ TAny ] (translateType ty)
+
+
+  translateType ty
+    | Just (_, fnTypes) <- uncurriedFnTypes dataFunctionUncurried "Fn" ty
+    , tret <- last fnTypes
+    , targs <- take (length fnTypes -1 ) fnTypes
+    = TFun (translateType <$> targs) (translateType tret)
+  translateType ty
+    | Just (_, fnTypes) <- uncurriedFnTypes effectUncurried "EffectFn" ty
+    , tret <- last fnTypes
+    , targs <- take (length fnTypes -1 ) fnTypes
+    = TFun (translateType <$> targs) (translateType tret)
+    
   translateType _ = TAny
+
+  ctorTy :: ModuleName -> T.Text -> SourceType
+  ctorTy mn fn = (TypeConstructor nullSourceAnn (Qualified (Just mn) (ProperName fn)))
 
   uncurryType :: Int -> EType -> Maybe EType
   uncurryType arity = uc []
     where 
+      uc [] uncurriedType@(TFun ts _) | length ts > 1 = Just uncurriedType
       uc ts (TFun [ t1 ] t2) = uc (t1:ts) t2
       uc ts t | length ts == arity = Just $ TFun (reverse ts) t
       uc _ _ = Nothing

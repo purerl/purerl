@@ -90,9 +90,12 @@ literals = mkPattern' match
       printTy TFloat = "float()"
       printTy (TAlias alias) = alias <> "()"
       printTy (TAtom Nothing) = "atom()"
-      printTy (TAtom (Just atom)) = atom
+      printTy (TAtom (Just a)) = a
+      printTy (TList t) = "list(" <> printTy t <> ")"
+      printTy (TMap Nothing) = "map()"
+      printTy (TMap (Just ts)) = "#{"<> (T.intercalate "," $ (\(t1, t2) -> printTy t1 <> " => " <> printTy t2) <$> ts ) <> "}"
+      printTy (TRemote mod tyname tys) = mod <> ":" <> tyname <> "(" <> T.intercalate "," (printTy <$> tys) <> ")"
 
-      
       printTy _ = "any()"
 
   match (EVar x) = return $ emit x
