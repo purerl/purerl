@@ -275,11 +275,12 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
   translateType (TypeApp _ (TypeApp _ t t1) t2) | t == ctorTy erlDataMap "Map" = TMap (Just [(translateType t1, translateType t2)])
   translateType (TypeApp _ t1 t2) | t1 == ctorTy effect "Effect" = TFun [] $ translateType t2
   
-  translateType (TypeApp _ tr t1) | tr == tyRecord = TMap $ Just $ row t1
+  translateType (TypeApp _ tr t1) | tr == tyRecord = TMap $ row t1 []
     where
-      row (REmpty _) = []
-      row (RCons _ label t ttail) = (TAtom $ Just $ atomPS $ runLabel label, translateType t) : row ttail
-      row _ = error "Shouldn't find random type in row list"
+      row (REmpty _) acc = Just acc
+      row (RCons _ label t ttail) acc = row ttail ((TAtom $ Just $ atomPS $ runLabel label, translateType t) : acc)
+      row (TypeVar _ _) _ = Nothing
+      row t _ = error $ "Shouldn't find random type in row list: " <> show t
 
   translateType (ForAll _ _ _ ty _) = translateType ty
   translateType (ConstrainedType _ _ ty) = TFun [ TAny ] (translateType ty)

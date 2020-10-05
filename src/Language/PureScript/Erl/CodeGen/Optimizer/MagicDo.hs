@@ -17,7 +17,8 @@ magicDo :: Erl -> Erl
 magicDo = magicDo'' EC.effect EC.effectDictionaries
 
 magicDo'' :: Text -> EC.EffectDictionaries -> Erl -> Erl
-magicDo'' effectModule EC.EffectDictionaries{..} = everywhereOnErl undo . everywhereOnErlTopDown convert
+magicDo'' effectModule EC.EffectDictionaries{..} =
+  everywhereOnErlTopDown convert
   where
   -- The name of the function block which is added to denote a do block
   fnName = "__do"
@@ -59,8 +60,3 @@ magicDo'' effectModule EC.EffectDictionaries{..} = everywhereOnErl undo . everyw
   isPurePoly = isUncurriedFn (EC.controlApplicative, C.pure')
   -- Check if an expression represents the polymorphic discard function
   isDiscardPoly = isUncurriedFn (EC.controlBind, C.discard)
-
-  -- Remove __do function applications which remain after desugaring
-  undo :: Erl -> Erl
-  undo (EApp (EFun0 (Just ident) body) []) | ident == fnName = body -- TODO renameBoundVars  ?
-  undo other = other
