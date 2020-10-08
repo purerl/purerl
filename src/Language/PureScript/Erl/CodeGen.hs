@@ -375,7 +375,7 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
     funs <- forM vals $ \((_, ident), val) -> do
       erl <- valueToErl' Nothing val
       let erl' = foldr replaceFun erl vars
-      let fun = EFunFull Nothing [(EFunBinder [varTup] Nothing, erl')]
+      let fun = EFunFull (Just "Reccase") [(EFunBinder [varTup] Nothing, erl')]
       pure $ EVarBind (identToVar ident <> "@f") fun
     let rebinds = map (\var -> EVarBind var (EApp (EVar $ var <> "@f") [varTup])) vars
     pure $ funs ++ rebinds
@@ -451,7 +451,7 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
   valueToErl' _ (Case _ values binders) = do
     vals <- mapM valueToErl values
     (exprs, binders', newvals) <- bindersToErl vals binders
-    let ret = EApp (EFunFull Nothing binders') (vals++newvals)
+    let ret = EApp (EFunFull (Just "Case") binders') (vals++newvals)
     pure $ case exprs of
       [] -> ret
       _ -> EBlock (exprs ++ [ret])
@@ -529,7 +529,7 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
       var <- freshNameErl
       ge' <- valueToErl ge
       let binder = EFunBinder bs Nothing
-          fun = EFunFull Nothing
+          fun = EFunFull (Just "Guard")
                   ((binder, ge') :
                   if irrefutable binder then []
                   else [(EFunBinder (replicate (length bs) (EVar "_")) Nothing, boolToAtom False)])

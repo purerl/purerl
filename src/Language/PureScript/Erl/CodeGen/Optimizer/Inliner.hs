@@ -33,6 +33,8 @@ shouldInline :: Erl -> Bool
 shouldInline (EVar _) = True
 shouldInline _ = False
 
+-- (\y_0 ... y_{n-1}. e) x_0 ... x_{n-1} --beta--> f[y_0 |-> x_0, ..., y_{n-1} |-> x_{n-1}]
+
 etaConvert :: MonadSupply m => Erl -> m Erl
 etaConvert = everywhereOnErlTopDownM convert
   where
@@ -42,7 +44,8 @@ etaConvert = everywhereOnErlTopDownM convert
       | all shouldInline args
       , xs `disjoint` mapMaybe unEVar args
       , all (not . flip isRebound e) xs
-      , all (not . flip isReboundE e) args = renameBoundVars $ replaceIdents (zip xs args) e
+      , all (not . flip isReboundE e) args 
+      = renameBoundVars $ replaceIdents (zip xs args) e
     convert e = pure e
 
     unEVar (EVar x) = Just x
@@ -57,7 +60,9 @@ etaConvert = everywhereOnErlTopDownM convert
     isReboundE (EVar x) e = isRebound x e
     isReboundE _ _ = False
 
+
 -- TODO: That's not iifes
+-- \x. (f x) --eta--> f  (x \notelem FV(f))
 -- -- fun (X) -> fun {body} end(X) end  --> fun {body} end
 evaluateIifes :: Erl -> Erl
 evaluateIifes = everywhereOnErl convert

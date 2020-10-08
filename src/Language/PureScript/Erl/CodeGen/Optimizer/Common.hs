@@ -70,9 +70,9 @@ isRebound x =
   snd . flip runState False . everywhereOnErlTopDownM go 
   where
   go :: Erl -> State Bool Erl
-  go e@(EFunFull _ args) = do
-    when (any matchBinder args) $ put True
-    pure e
+  -- go e@(EFunFull _ args) = do
+  --   when (any matchBinder args) $ put True
+  --   pure e
   go e@(EVarBind x' _) | x == x' = do
     put True
     pure e
@@ -81,12 +81,11 @@ isRebound x =
     pure e
   go e = pure e
 
-  matchBinder (EFunBinder es _, _) = any (\z -> z == EVar x) es || any (not . isVar) es
+  matchBinder (EFunBinder es _, _) = any (occurs x) es
 
-  matchCaseBinder (EBinder (EVar x')) = x == x'
-  matchCaseBinder (EGuardedBinder (EVar x') _) = x == x'
-  matchCaseBinder _ = True -- Conservative
-
+  matchCaseBinder (EBinder e) = occurs x e
+  matchCaseBinder (EGuardedBinder e _) = occurs x e
+  
   isVar (EVar _) = True
   isVar _ = False
 
