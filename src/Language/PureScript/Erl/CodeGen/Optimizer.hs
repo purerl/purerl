@@ -41,6 +41,7 @@ optimize erl = do
     [ pure . collapseNestedBlocks
     , pure . inlineSimpleGuards
     , pure . evaluateIifes
+    , pure . singleBegin
     , etaConvert
     ]
 

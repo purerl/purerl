@@ -6,6 +6,7 @@ module Language.PureScript.Erl.CodeGen.Optimizer.Inliner
   , inlineCommonOperators
   , evaluateIifes
   , etaConvert
+  , singleBegin
   )
   where
 
@@ -33,7 +34,20 @@ shouldInline :: Erl -> Bool
 shouldInline (EVar _) = True
 shouldInline _ = False
 
--- (\y_0 ... y_{n-1}. e) x_0 ... x_{n-1} --beta--> f[y_0 |-> x_0, ..., y_{n-1} |-> x_{n-1}]
+-- inline as we generate this for FFI calls
+-- begin X = E, X(A)(B)... end
+singleBegin :: Erl -> Erl
+singleBegin = everywhereOnErl convert
+  where
+  convert :: Erl -> Erl
+  convert (EBlock [ EVarBind x e, e2 ]) | happy x e2
+    = replaceIdents [(x, e)] e2
+  convert e = e
+
+  happy x (EVar x') | x == x' = True
+  happy x (EApp e [EVar y]) | x /= y = happy x e
+  happy _ _ = False
+
 
 etaConvert :: MonadSupply m => Erl -> m Erl
 etaConvert = everywhereOnErlTopDownM convert
