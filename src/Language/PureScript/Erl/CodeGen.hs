@@ -173,6 +173,7 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
     fident <- fmap (Ident . ("f" <>) . T.pack . show) fresh
     let var = Qualified Nothing fident
         wrap e = EBlock [ EVarBind (identToVar fident) fun, e ]
+
     generateFunctionOverloads Nothing (ssAnn nullSourceSpan) ident (Atom Nothing $ runIdent ident) (Var (ssAnn nullSourceSpan) var) wrap
 
   curriedLambda :: Erl -> [T.Text] -> Erl
@@ -436,6 +437,15 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
         return $ constructorLiteral (runIdent ident) args'
       Var (_, _, _, Just IsTypeClassConstructor) name ->
         return $ curriedApp args' $ EApp (EAtomLiteral $ qualifiedToTypeclassCtor name) []
+
+      -- fully saturated call to foreign import
+      Var _ qi@(Qualified (Just mn') ident)
+        | mn' == mn
+        , arity <- fromMaybe 0 (M.lookup qi arities)
+        , length args == arity
+        , Just expArity <- findExport $ runIdent ident
+        , expArity == arity
+        -> return $ EApp (EAtomLiteral $ qualifiedToErl' mn ForeignModule ident) args'
 
       Var _ qi@(Qualified _ _)
         | arity <- fromMaybe 0 (M.lookup qi arities)
