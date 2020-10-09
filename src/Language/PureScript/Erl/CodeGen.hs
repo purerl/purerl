@@ -46,7 +46,7 @@ import Language.PureScript.Erl.Errors.Types
 import Language.PureScript.Erl.Errors (MultipleErrors, rethrow, rethrowWithPosition, addHint, errorMessage)
 import Language.PureScript.Erl.CodeGen.Common
 
-import Debug.Trace (traceM)
+import Debug.Trace
 
 freshNameErl :: (MonadSupply m) => m T.Text
 freshNameErl = fmap (("_@" <>) . T.pack . show) fresh
@@ -461,7 +461,16 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
   valueToErl' _ (Case _ values binders) = do
     vals <- mapM valueToErl values
     (exprs, binders', newvals) <- bindersToErl vals binders
-    let ret = EApp (EFunFull (Just "Case") binders') (vals++newvals)
+    -- let ret = EApp (EFunFull (Just "Case") binders') (vals++newvals)
+    let funBinderToBinder = \case (EFunBinder [e] Nothing, ee) -> (EBinder e, ee)
+                                  (EFunBinder [e] (Just g), ee) -> (EGuardedBinder e g, ee)
+                                  
+                                  (EFunBinder es Nothing, ee) -> (EBinder (ETupleLiteral es), ee)
+                                  (EFunBinder es (Just g), ee) -> (EGuardedBinder (ETupleLiteral es) g, ee)
+    let ret = case (binders', vals, newvals) of
+                (binders, [val'], []) -> ECaseOf val' (map funBinderToBinder binders)
+                (binders, _, []) -> ECaseOf (ETupleLiteral vals) (map funBinderToBinder binders)
+                _ -> EApp (EFunFull (Just "Case") binders') (vals++newvals)
     pure $ case exprs of
       [] -> ret
       _ -> EBlock (exprs ++ [ret])
@@ -527,9 +536,21 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
     caseToErl :: Int -> CaseAlternative Ann -> m ([Erl], [(EFunBinder, Erl)], [(Erl, Erl)])
     caseToErl numBinders (CaseAlternative binders alt) = do
       let binders' = binders ++ (replicate (numBinders - length binders) $ NullBinder (nullSourceSpan , [], Nothing, Nothing))
-      b' <- mapM (binderToErl' vals) binders'
+          vars = nub $ concatMap binderVars binders'
+      
+      newVars <- map Ident <$> replicateM (length vars) freshNameErl
+      
+      -- TODO we replace because case expressions do not introduce a scope for the binders, but to preserve identifier
+      -- names we could do so only for those identifiers which are not already fresh here
+      -- but we currently don't have a parent scope available
+      let (_, replaceExpVars, replaceBinderVars) = everywhereOnValues id (replaceEVars (zip vars newVars)) (replaceBVars (zip vars newVars))
+
+      let binders'' = map replaceBinderVars binders'
+          (Case _ [] [CaseAlternative [] alt']) = replaceExpVars (Case (nullSourceSpan , [], Nothing, Nothing) [] [CaseAlternative [] alt])
+          -- alt' = replaceAltVars (zip vars newVars) (alt :: _)
+      b' <- mapM (binderToErl' vals) binders''
       let (bs, erls) = second concat $ unzip b'
-      (es, res) <- case alt of
+      (es, res) <- case alt' of
         Right e -> do
           e' <- valueToErl e
           pure ([], [(EFunBinder bs Nothing, e')])
@@ -546,6 +567,39 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
           cas = EApp fun vals
       e' <- valueToErl e
       pure ([EVarBind var cas], (EFunBinder bs (Just $ Guard $ EVar var), e'))
+
+  binderVars :: Binder Ann -> [Ident]
+  binderVars (VarBinder _ ident) = [ident]
+  binderVars (NamedBinder _ ident binder) = ident : binderVars binder
+  binderVars (LiteralBinder _ (ArrayLiteral es)) = concatMap binderVars es
+  binderVars (LiteralBinder _ (ObjectLiteral _)) = [] -- TODO
+  binderVars (ConstructorBinder _ _ _ binders) = concatMap binderVars binders
+  binderVars (LiteralBinder _ _) = []
+  binderVars (NullBinder _) = []
+
+  -- replaceVars :: [(Ident, Ident)] -> Binder Ann -> Binder Ann
+  -- replaceVars vars = \case
+  --   VarBinder a v -> VarBinder a $ fromMaybe v $ lookup v vars
+  --   NamedBinder a v b -> NamedBinder a (fromMaybe v $ lookup v vars) (replaceVars vars b)
+  --   LiteralBinder a (ArrayLiteral bs) -> LiteralBinder a $ ArrayLiteral $ replaceVars vars <$> bs
+  --   ol@(LiteralBinder _ (ObjectLiteral _)) -> ol --TODO
+  --   ConstructorBinder a b c binders -> ConstructorBinder a b c $ replaceVars vars <$> binders
+  --   x@LiteralBinder{} -> x
+  --   x@NullBinder{} -> x
+
+  -- replaceAltVars :: [(Ident, Ident)] -> Either [(Guard Ann, Expr Ann)] (Expr Ann) -> Either [(Guard Ann, Expr Ann)] (Expr Ann)
+  -- replaceAltVars vars = case _ of
+  --   Right e -> Right $ replaceEVars e
+  --   Left gs -> Left $ map (\(g, e) -> (replaceGVars g, repalceEVars e)) gs
+
+  replaceEVars :: [(Ident, Ident)] -> Expr Ann -> Expr Ann
+  replaceEVars vars (Var a (Qualified q x)) = Var a $ Qualified q $ fromMaybe x $ lookup x vars 
+  replaceEVars _ z = z
+
+  replaceBVars :: [(Ident, Ident)] -> Binder Ann -> Binder Ann
+  replaceBVars vars (VarBinder a x) = VarBinder a $ fromMaybe x $ lookup x vars 
+  replaceBVars vars (NamedBinder a x b) = NamedBinder a (fromMaybe x $ lookup x vars ) b
+  replaceBVars _ z = z
 
   binderToErl' :: [Erl] -> Binder Ann -> m (Erl,[(EFunBinder -> Erl,(T.Text, Erl))])
   binderToErl' _ (NullBinder _) = pure (EVar "_", [])

@@ -174,10 +174,16 @@ literals = mkPattern' match
           indentStr <- currentIndent
           return $ indentStr <> emit (fromMaybe "" name) <> parensPos b' <> g' <> emit " -> \n" <> v --parensPos b' <> g' <> emit " -> " <> v
 
-  match (ECaseOf e binders) = do
-    e' <- prettyPrintErl' e
-    bs <- prettyPrintBinders binders
-    return $ emit "case " <> e' <> emit " of\n" <> bs <> emit "\nend"
+  match (ECaseOf e binders) =
+    mconcat <$> sequence
+    [ return $ emit "case "
+    , prettyPrintErl' e
+    , return $ emit " of\n"
+    , withIndent $ prettyPrintBinders binders
+    , return $ emit "\n"
+    , currentIndent
+    , return $ emit "end"
+    ]
     where
     prettyPrintBinders :: (Emit gen) => [(EBinder, Erl)] -> StateT PrinterState Maybe gen
     prettyPrintBinders bs = intercalate (emit ";\n") <$> mapM prettyPrintBinder bs
@@ -186,12 +192,14 @@ literals = mkPattern' match
     prettyPrintBinder (EBinder eb, e') = do
       c <- prettyPrintErl' eb
       v <- prettyPrintErl' e'
-      return $ parensPos c <> emit " -> " <> v
+      i <- currentIndent 
+      return $ i <> parensPos c <> emit " -> " <> v
     prettyPrintBinder (EGuardedBinder eb (Guard eg), e') = do
       c <- prettyPrintErl' eb
       v <- prettyPrintErl' e'
       g <- prettyPrintErl' eg
-      return $ parensPos c <> emit " when "  <> g <> emit " -> " <> v
+      i <- currentIndent 
+      return $ i <> parensPos c <> emit " when "  <> g <> emit " -> " <> v
 
   match (EAttribute name text) = case (decodeString name, decodeString text) of
     (Just name', Just text') ->
