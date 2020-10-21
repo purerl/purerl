@@ -80,7 +80,12 @@ buildActions outputDir env foreigns usePrefix =
           "-compile(nowarn_shadow_vars).",
           "-compile(nowarn_unused_vars).",
           "-compile(nowarn_unused_function).",
-          "-compile(no_auto_import)."
+          "-compile(no_auto_import).",
+          "-ifndef(MEMOIZE).",
+          "-define(MEMOIZE(X), X).",
+          "-else.",
+          "memoize(X) -> X.",
+          "-endif."
           ]
     let erl :: T.Text = T.unlines $ map ("% " <>) prefix ++ directives ++ [ pretty ]
     lift $ writeTextFile (outFile mn) $ TE.encodeUtf8 erl

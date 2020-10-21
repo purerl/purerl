@@ -40,6 +40,7 @@ optimize erl = do
   tidyUp = applyAllM
     [ pure . collapseNestedBlocks
     , pure . inlineSimpleGuards
+    , pure . beginBinds
     , pure . evaluateIifes
     , pure . singleBegin
     , etaConvert

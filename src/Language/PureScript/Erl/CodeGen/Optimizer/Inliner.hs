@@ -7,6 +7,7 @@ module Language.PureScript.Erl.CodeGen.Optimizer.Inliner
   , evaluateIifes
   , etaConvert
   , singleBegin
+  , beginBinds
   )
   where
 
@@ -30,9 +31,13 @@ import Language.PureScript.Erl.CodeGen.Common (atomPS)
 
 import qualified Data.Map as Map
 
-shouldInline :: Erl -> Bool
-shouldInline (EVar _) = True
-shouldInline _ = False
+isEVar :: Erl -> Bool
+isEVar (EVar _) = True
+isEVar _ = False
+
+unEVar (EVar x) = Just x
+unEVar _ = Nothing
+
 
 -- inline as we generate this for FFI calls
 -- begin X = E, X(A)(B)... end
@@ -48,6 +53,34 @@ singleBegin = everywhereOnErl convert
   happy x (EApp e [EVar y]) | x /= y = happy x e
   happy _ _ = False
 
+beginBinds :: Erl -> Erl
+beginBinds = everywhereOnErl convert
+  where
+  convert :: Erl -> Erl
+  convert outer@(EApp (EBlock es) args)
+    | e:evars <- reverse es
+    , all (okBind args) evars
+    = EBlock (reverse evars ++ [EApp e args])
+  convert other = other
+
+  okBind args ebind = all isEVar args &&
+    (case ebind of
+      (EVarBind x e) -> 
+        (not $ x `Set.member` argVars) &&
+        (all (\y -> not $ occurs y e) argVars)
+      other -> False
+    )
+
+    where 
+    argVars = Set.fromList $ mapMaybe unEVar args
+
+    
+
+-- (begin X1 = E1, ... Xn = En, F end)(X)
+-- to
+-- begin X1 = E1, ... Xn = En, F(X) end
+-- X /= Xi, X \notin FV(Ei)
+
 
 etaConvert :: MonadSupply m => Erl -> m Erl
 etaConvert = everywhereOnErlTopDownM convert
@@ -55,15 +88,13 @@ etaConvert = everywhereOnErlTopDownM convert
     convert :: MonadSupply m => Erl -> m Erl
     -- TODO ported from JS, but this seems to be beta-reduction and the iife below is eta...?
     convert (EApp (EFunN _ xs e) args)
-      | all shouldInline args
+      | all isEVar args
       , xs `disjoint` mapMaybe unEVar args
       , all (not . flip isRebound e) xs
       , all (not . flip isReboundE e) args 
       = renameBoundVars $ replaceIdents (zip xs args) e
     convert e = pure e
 
-    unEVar (EVar x) = Just x
-    unEVar _ = Nothing
 
     disjoint l1 l2 =
       Set.null $ s1 `Set.intersection` s2

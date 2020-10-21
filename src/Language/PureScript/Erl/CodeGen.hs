@@ -54,19 +54,22 @@ freshNameErl = fmap (("_@" <>) . T.pack . show) fresh
 identToTypeclassCtor :: Ident -> Atom
 identToTypeclassCtor a = Atom Nothing (runIdent a)
 
-qualifiedToTypeclassCtor :: Qualified Ident -> Atom
-qualifiedToTypeclassCtor (Qualified (Just mn) ident) = Atom (Just $ atomModuleName mn PureScriptModule) (runIdent ident)
-qualifiedToTypeclassCtor (Qualified  Nothing ident) = Atom Nothing (runIdent ident)
 
 isTopLevelBinding :: Qualified t -> Bool
 isTopLevelBinding (Qualified (Just _) _) = True
 isTopLevelBinding (Qualified Nothing _) = False
 
-tyArity :: SourceType -> Int
-tyArity (TypeApp _ (TypeApp _ fn _) ty) | fn == E.tyFunction = 1 + tyArity ty
-tyArity (ForAll _ _ _ ty _) = tyArity ty
-tyArity (ConstrainedType _ _ ty) = 1 + tyArity ty 
-tyArity _ = 0
+tyArity :: SourceType -> FnArity
+tyArity t = Arity $ go 0 t
+  where
+  go n = \case
+    ConstrainedType _ _ ty -> go (n+1) ty
+    ForAll _ _ _ ty _ -> go n ty
+    other -> (n, go' other)
+  go' = \case
+    TypeApp _ (TypeApp _ fn _) ty | fn == E.tyFunction -> 1 + go' ty
+    ForAll _ _ _ ty _ -> go' ty
+    _ -> 0
 
 uncurriedFnTypes :: ModuleName -> T.Text -> SourceType -> Maybe (Int,[SourceType])
 uncurriedFnTypes moduleName fnName = go []
@@ -100,6 +103,7 @@ erlDataList = ModuleName "Erl.Data.List"
 erlDataMap :: ModuleName
 erlDataMap = ModuleName "Erl.Data.Map"
 
+data FnArity = EffFnXArity Int | FnXArity Int | Arity (Int, Int)
 
 -- |
 -- Generate code in the simplified Erlang intermediate representation for all declarations in a
@@ -151,21 +155,23 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
   biconcat :: [([a], [b])] -> ([a], [b])
   biconcat x = (concatMap fst x, concatMap snd x)
 
-  explicitArities :: M.Map (Qualified Ident) Int
+  explicitArities :: M.Map (Qualified Ident) FnArity
   explicitArities = tyArity <$> types
 
-  arities :: M.Map (Qualified Ident) Int
+  arities :: M.Map (Qualified Ident) FnArity
   arities = 
     -- max arities is max of actual impl and most saturated application
     let actualArities = M.fromList $ map (\(x, n) -> (Qualified (Just mn) (Ident x), n)) foreignExports
         inferredMaxArities = foldr findApps actualArities decls
-    in explicitArities `M.union` inferredMaxArities
+    in (explicitArities `M.union` ((\n -> Arity (0, n)) <$> inferredMaxArities))
 
   -- 're-export' foreign imports in the @ps module - also used for internal calls for non-exported foreign imports
   reExportForeign :: Ident -> m ([(Atom,Int)], [Erl])
   reExportForeign ident = do
     let arity = exportArity ident
-        fullArity = fromMaybe arity (M.lookup (Qualified (Just mn) ident) arities)
+        fullArity = case (M.lookup (Qualified (Just mn) ident) arities) of 
+          Just (Arity (0, n)) -> n
+          _ -> arity 
     args <- replicateM fullArity freshNameErl
     let body = EApp (EAtomLiteral $ qualifiedToErl' mn ForeignModule ident) (take arity $ map EVar args)
         body' = curriedApp (drop arity $ map EVar args) body
@@ -191,8 +197,8 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
       -- If we know the foreign import type (because it was exported) and the actual FFI type, it is an error if
       -- the actual implementation has higher arity than the type does
       -- If the actual implementation has lower arity, it may be just returning a function
-      (Just m, Just n) | m > n ->
-        throwError . errorMessage $ InvalidFFIArity mn (runIdent ident) m n
+      (Just m, Just (Arity (nc, n))) | m > nc+n ->
+        throwError . errorMessage $ InvalidFFIArity mn (runIdent ident) m (nc+n)
       
       -- If we don't know the declared type of the foreign import (because it is not exported), then we cannot say
       -- what the implementation's arity should be, as it may be higher than can be inferred from applications in this
@@ -213,14 +219,14 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
   topBindToErl (NonRec ann ident val) = topNonRecToErl ann ident val
   topBindToErl (Rec vals) = biconcat <$> traverse (uncurry . uncurry $ topNonRecToErl) vals
 
-  uncurriedFnArity' :: ModuleName -> T.Text -> Qualified Ident -> Maybe Int
-  uncurriedFnArity' fnMod fn ident =
+  uncurriedFnArity' :: (Int -> FnArity) -> ModuleName -> T.Text -> Qualified Ident -> Maybe FnArity
+  uncurriedFnArity' ctor fnMod fn ident =
     case M.lookup ident types of
-      Just t -> uncurriedFnArity fnMod fn t
+      Just t -> ctor <$> uncurriedFnArity fnMod fn t
       _ -> Nothing
 
-  effFnArity = uncurriedFnArity' effectUncurried "EffectFn" 
-  fnArity = uncurriedFnArity' dataFunctionUncurried "Fn"
+  effFnArity = uncurriedFnArity' EffFnXArity effectUncurried "EffectFn" 
+  fnArity = uncurriedFnArity' FnXArity dataFunctionUncurried "Fn"
       
   topNonRecToErl :: Ann -> Ident -> Expr Ann -> m ([(Atom,Int)], [ Erl ])
   topNonRecToErl (ss, _, _, _) ident val = do
@@ -246,19 +252,42 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
     -- f x y = ... -~~> f(X,Y) -> ((...)(X))(Y).
     -- Relying on inlining to clean up some junk here
     let mkRunApp modName prefix n = App eann (Var eann (Qualified (Just modName) (Ident $ prefix <> T.pack (show n))))
-        (wrap, unwrap) = case effFnArity qident of
-          Just n -> (mkRunApp effectUncurried C.runEffectFn n, \e -> EApp e [])
-          _ | Just n <- fnArity qident -> (mkRunApp dataFunctionUncurried C.runFn n, id)
-          _ -> (id, id)
+        applyStep fn a = App eann fn (Var eann (Qualified Nothing (Ident a)))
 
-
+    -- Apply in CoreFn then translate to take advantage of translation of full/partial application
     uncurried <- case effFnArity qident <|> fnArity qident <|> M.lookup qident arities of
-      Just arity | arity > 0 -> do
+      Just (EffFnXArity arity) -> do
         vars <- replicateM arity freshNameErl
-        -- Apply in CoreFn then translate to take advantage of translation of full/partial application
-        erl' <- valueToErl $ foldl (\fn a -> App eann fn (Var eann (Qualified Nothing (Ident a)))) (wrap val) vars
-        pure ( [ (ident', arity) ], [ EFunctionDef (uncurryType arity =<< erlangType) ss ident' vars (outerWrapper (unwrap erl')) ] )
+        erl' <- valueToErl $ foldl applyStep (mkRunApp effectUncurried C.runEffectFn arity val) vars
+        pure ( [ (ident', arity) ], [ EFunctionDef (uncurryType arity =<< erlangType) ss ident' vars (outerWrapper (EApp erl' [])) ] )
+
+      Just (FnXArity arity) -> do
+        -- Same as above
+        vars <- replicateM arity freshNameErl
+        erl' <- valueToErl $ foldl applyStep (mkRunApp dataFunctionUncurried C.runFn arity val) vars
+        pure ( [ (ident', arity) ], [ EFunctionDef (uncurryType arity =<< erlangType) ss ident' vars (outerWrapper erl') ] )
+
+      Just (Arity (n, m)) | n + m > 0 -> do
+        let arity = n+m
+        vars <- replicateM arity freshNameErl
+        erl' <- valueToErl $ foldl applyStep val vars
+        split <- if n == 0 || m == 0 then
+                  pure ([], [])
+                 else
+                  do
+                    erl'' <- valueToErl $ foldl applyStep val (take n vars)
+                    pure ( [ (ident', n) ], [ EFunctionDef Nothing ss ident' (take n vars) (outerWrapper erl'') ] )
+        let full = ( [ (ident', arity) ], [ EFunctionDef (uncurryType arity =<< erlangType) ss ident' vars (outerWrapper erl') ] )
+        pure $ split <> full
       _ -> pure ([], [])
+
+    -- uncurried <- case effFnArity qident <|> fnArity qident <|> M.lookup qident arities of
+    --   Just arity | arity > 0 -> do
+    --     vars <- replicateM arity freshNameErl
+    --     -- Apply in CoreFn then translate to take advantage of translation of full/partial application
+    --     erl' <- valueToErl $ foldl (\fn a -> App eann fn (Var eann (Qualified Nothing (Ident a)))) (wrap val) vars
+    --     pure ( [ (ident', arity) ], [ EFunctionDef (uncurryType arity =<< erlangType) ss ident' vars (outerWrapper (unwrap erl')) ] )
+    --   _ -> pure ([], [])
 
     let res = curried <> uncurried
     pure $ if ident `Set.member` declaredExportsSet 
@@ -384,12 +413,27 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
   qualifiedToErl' mn' moduleType ident = Atom (Just $ atomModuleName mn' moduleType) (runIdent ident)
 
   -- Top level definitions are everywhere fully qualified, variables are not.
-  qualifiedToErl (Qualified (Just mn') ident) | mn == mn' && ident `Set.notMember` declaredExportsSet  =
-    Atom Nothing (runIdent ident) -- Local reference to local non-exported function
-  qualifiedToErl (Qualified (Just mn') ident) = qualifiedToErl' mn' PureScriptModule ident -- Reference other modules or exported things via module name
+  qualifiedToErl (Qualified (Just mn') ident)
+    -- Local reference to local non-exported function
+    | mn == mn' -- TODO making all local calls non qualified - for memoization onload - revert
+    -- && ident `Set.notMember` declaredExportsSet  =
+      =Atom Nothing (runIdent ident)
+    -- Reference other modules or exported things via module name
+    | otherwise = 
+      qualifiedToErl' mn' PureScriptModule ident
   qualifiedToErl x = error $ "Invalid qualified identifier " <> T.unpack (showQualified showIdent x)
 
   qualifiedToVar (Qualified _ ident) = identToVar ident
+
+  qualifiedToTypeclassCtor :: Qualified Ident -> Atom
+  qualifiedToTypeclassCtor (Qualified (Just mn') ident)
+    -- this case could be always qualified, but is not to assist optimisation
+    | mn == mn' =
+      Atom Nothing (runIdent ident)
+    | otherwise =
+      Atom (Just $ atomModuleName mn' PureScriptModule) (runIdent ident)
+  qualifiedToTypeclassCtor (Qualified  Nothing ident) = Atom Nothing (runIdent ident)
+
 
   valueToErl :: Expr Ann -> m Erl
   valueToErl = valueToErl' Nothing
@@ -401,8 +445,10 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
     return $ EAtomLiteral $ Atom Nothing C.undefined
   valueToErl' _ (Var _ ident) | isTopLevelBinding ident = pure $
     case M.lookup ident arities of
-      Just 1 -> EFunRef (qualifiedToErl ident) 1
-      _ | Just arity <- effFnArity ident <|> fnArity ident
+      Just (Arity (0, 1)) -> EFunRef (qualifiedToErl ident) 1
+      _ | Just (EffFnXArity arity) <- effFnArity ident
+        , arity > 0 -> EFunRef (qualifiedToErl ident) arity 
+      _ | Just (FnXArity arity) <- fnArity ident
         , arity > 0 -> EFunRef (qualifiedToErl ident) arity 
       _ -> EApp (EAtomLiteral $ qualifiedToErl ident) []
 
@@ -430,25 +476,41 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
 
   valueToErl' _ e@App{} = do
     let (f, args) = unApp e []
+
     args' <- mapM valueToErl args
     case f of
       Var (_, _, _, Just IsNewtype) _ -> return (head args')
       Var (_, _, _, Just (IsConstructor _ fields)) (Qualified _ ident) | length args == length fields ->
         return $ constructorLiteral (runIdent ident) args'
-      Var (_, _, _, Just IsTypeClassConstructor) name ->
-        return $ curriedApp args' $ EApp (EAtomLiteral $ qualifiedToTypeclassCtor name) []
+      Var (_, _, _, Just IsTypeClassConstructor) name -> do
+        let res = curriedApp args' $ EApp (EAtomLiteral $ qualifiedToTypeclassCtor name) []
+            
+            replaceQualifiedSelfCalls = \case 
+              (EAtomLiteral (Atom (Just emod) x)) | emod == atomModuleName mn PureScriptModule -> EAtomLiteral (Atom Nothing x)
+              other -> other
+        pure $ everywhereOnErl replaceQualifiedSelfCalls res
 
       -- fully saturated call to foreign import
       Var _ qi@(Qualified (Just mn') ident)
         | mn' == mn
-        , arity <- fromMaybe 0 (M.lookup qi arities)
+        , Just (Arity (a0, a1)) <- M.lookup qi arities
+        , let arity = a0+a1
         , length args == arity
         , Just expArity <- findExport $ runIdent ident
         , expArity == arity
         -> return $ EApp (EAtomLiteral $ qualifiedToErl' mn ForeignModule ident) args'
 
+      -- partially saturated application (all tc dicts to be applied in 1 call and maybe more to be applied to the curried result)
       Var _ qi@(Qualified _ _)
-        | arity <- fromMaybe 0 (M.lookup qi arities)
+        | Just (Arity (n, _)) <- M.lookup qi arities
+        , length args >= n
+        , n > 0
+        -> return $ curriedApp (drop n args') $ memoizeAnnotation $ EApp (EAtomLiteral (qualifiedToErl qi)) (take n args') 
+
+      -- Fully saturated (consuming tc dicts and value args in 1 call)
+      Var _ qi@(Qualified _ _)
+        | Just (Arity (n, m)) <- M.lookup qi arities
+        , let arity = n + m
         , length args == arity
         -> return $ EApp (EAtomLiteral (qualifiedToErl qi)) args'
 
@@ -457,6 +519,8 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
     unApp :: Expr Ann -> [Expr Ann] -> (Expr Ann, [Expr Ann])
     unApp (App _ val arg) args = unApp val (arg : args)
     unApp other args = (other, args)
+
+    memoizeAnnotation emem = (EApp (EVar "?MEMOIZE")) [ emem ]
 
   valueToErl' _ (Case _ values binders) = do
     vals <- mapM valueToErl values
@@ -468,8 +532,8 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
                                   (EFunBinder es Nothing, ee) -> (EBinder (ETupleLiteral es), ee)
                                   (EFunBinder es (Just g), ee) -> (EGuardedBinder (ETupleLiteral es) g, ee)
     let ret = case (binders', vals, newvals) of
-                (binders, [val'], []) -> ECaseOf val' (map funBinderToBinder binders)
-                (binders, _, []) -> ECaseOf (ETupleLiteral vals) (map funBinderToBinder binders)
+                (binders'', [val'], []) -> ECaseOf val' (map funBinderToBinder binders'')
+                (binders'', _, []) -> ECaseOf (ETupleLiteral vals) (map funBinderToBinder binders'')
                 _ -> EApp (EFunFull (Just "Case") binders') (vals++newvals)
     pure $ case exprs of
       [] -> ret

@@ -70,9 +70,15 @@ literals = mkPattern' match
     <>
     printFunTy t
     <>
-    [ return $ emit $ runAtom x <> "(" <> intercalate "," xs <> ") -> "
-    , prettyPrintErl' e
-    ])
+    [ return $ emit $ runAtom x <> "(" <> intercalate "," xs <> ") -> " ]
+    <> case e of
+        EBlock es ->
+          [ return $ emit "\n"
+          , withIndent $ prettyPrintBlockBody es
+          , return $ emit "\n"
+          ]
+        _ -> [prettyPrintErl' e]
+    )
     where
       printFunTy (Just (TFun ts ty)) =
         [ return $ emit $ "-spec " <> runAtom x <> "(" <> (T.intercalate "," $ printTy <$> ts) <> ") -> " <> printTy ty <> ".\n" ]
