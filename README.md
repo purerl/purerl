@@ -6,6 +6,10 @@ A small strongly typed programming language with expressive types, written in an
 
 The original PureScript project compiles to JavaScript, but this fork is a backend targetting Erlang source. The [purerl](https://github.com/purerl) organisation hosts ports of some core libraries.
 
+# Resources
+
+- [FP slack](https://fpchat-invite.herokuapp.com/) channel `#purerl` - general discussion, support, news
+
 # Versions
 
 Currently the `purerl` executable should correspond to `purs` compiler versions as follows:
