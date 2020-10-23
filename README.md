@@ -2,13 +2,13 @@
 
 # Overview
 
-A small strongly typed programming language with expressive types, written in and inspired by Haskell.
-
-The original PureScript project compiles to JavaScript, but this fork is a backend targetting Erlang source. The [purerl](https://github.com/purerl) organisation hosts ports of some core libraries.
+PureScript is a small strongly typed programming language with expressive types, written in and inspired by Haskell; purerl is a PureScript backend targetting Erlang source. 
 
 # Resources
 
 - [FP slack](https://fpchat-invite.herokuapp.com/) channel `#purerl` - general discussion, support, news
+- [purerl Pursuit](https://pursuit.purerl.fun/) - a version of the PureScript pursuit documentation repository for purerl package sets
+- The [purerl](https://github.com/purerl) organisation hosts ports of some core libraries.
 
 # Versions
 
