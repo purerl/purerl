@@ -53,6 +53,14 @@ Then run `purerl` to generate `.erl` files
 
 (No parameters are required, `purerl` will build whatever is in `output/`).
 
+## IDE support
+
+The standard PureScript IDE tooling based on `purs ide` and editor plugins and/or [PureScript Language Server](https://github.com/nwolverson/purescript-language-server) should work with purerl projects, but should be configured to generate `corefn` rather than `js`, eg with vscode:
+
+```json
+"purescript.codegenTargets": [ "corefn" ]
+```
+
 # purerl erlang representation and FFI usage
 
 Module names `Foo.Bar` are transformed to a lower-snake cased form `foo_bar` (any non-initial uppercase chars will be preserved as such), with a suffix `@ps` to avoid clashing with built-in erlang modules.
