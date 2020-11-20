@@ -22,7 +22,7 @@ import qualified Data.Set as Set
 
 import Language.PureScript.Erl.CodeGen.AST
 import Language.PureScript.Erl.CodeGen.Optimizer.Common
-import qualified Language.PureScript.Constants as C
+import qualified Language.PureScript.Constants.Prelude as C
 import qualified Language.PureScript.Erl.CodeGen.Constants as EC
 import Control.Monad.Supply.Class (MonadSupply)
 import Language.PureScript.Erl.CodeGen.Common (atomPS)

@@ -2,13 +2,21 @@ resolver: lts-13.26
 pvp-bounds: upper
 packages:
 - .
+# - purescript-ast
+# - purescript-cst
 extra-deps:
 - happy-1.19.9
 - language-javascript-0.7.0.0
 - network-3.0.1.1
 - these-1.0.1
 - semialign-1
-- purescript-0.13.8
+# - purescript-0.13.8
+- github: purescript/purescript
+  commit: 48634d05da1021ac1bcb4907461ae9b2d3b0e699
+  subdirs:
+    - lib/purescript-ast
+    - lib/purescript-cst
+    - '.'
 - serialise-0.2.2.0
 flags:
   aeson-pretty:

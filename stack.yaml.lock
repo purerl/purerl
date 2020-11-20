@@ -40,12 +40,53 @@ packages:
   original:
     hackage: semialign-1
 - completed:
-    hackage: purescript-0.13.8@sha256:4ab02b2d01d8bb27c5a854080a1a7c962fa544e42df804a8047972a6bbc396c6,58391
+    size: 598699
+    subdir: lib/purescript-ast
+    url: https://github.com/purescript/purescript/archive/48634d05da1021ac1bcb4907461ae9b2d3b0e699.tar.gz
+    cabal-file:
+      size: 2897
+      sha256: 4c3e6fb38b5971f85017597bccec51dd9b069a18515bf5bf66490f0ddf30bf38
+    name: purescript-ast
+    version: 0.1.0.0
+    sha256: d0d93b1c7d055ba100c79b510541dc8e6c5c6723e5633fe3fc082048cc2b175b
     pantry-tree:
-      size: 87513
-      sha256: 1a2a1581d8fbc0371bcfebf1b4f0ba0f452b2a7e5a5115055ca5d49cacfe2e2b
+      size: 1931
+      sha256: 9b5041415aa63db81195c1da9de2acb03e6de3f1863b5969fa4878744f4285a7
   original:
-    hackage: purescript-0.13.8
+    subdir: lib/purescript-ast
+    url: https://github.com/purescript/purescript/archive/48634d05da1021ac1bcb4907461ae9b2d3b0e699.tar.gz
+- completed:
+    size: 598699
+    subdir: lib/purescript-cst
+    url: https://github.com/purescript/purescript/archive/48634d05da1021ac1bcb4907461ae9b2d3b0e699.tar.gz
+    cabal-file:
+      size: 4016
+      sha256: bcac1e612cd2d7e0ae1e2c22b7b8d1b5eac123dd1ee1163f42da70de21f9e034
+    name: purescript-cst
+    version: 0.1.0.0
+    sha256: d0d93b1c7d055ba100c79b510541dc8e6c5c6723e5633fe3fc082048cc2b175b
+    pantry-tree:
+      size: 3234
+      sha256: 16e17e192cde46ad9568eda35780859abfd48969283268cacff6ae163d49ae42
+  original:
+    subdir: lib/purescript-cst
+    url: https://github.com/purescript/purescript/archive/48634d05da1021ac1bcb4907461ae9b2d3b0e699.tar.gz
+- completed:
+    size: 598699
+    subdir: .
+    url: https://github.com/purescript/purescript/archive/48634d05da1021ac1bcb4907461ae9b2d3b0e699.tar.gz
+    cabal-file:
+      size: 69554
+      sha256: 1d7e3f1c2a4ff6cd8f23408af986c7ce67282ed0156ac3c97ff282cc3e343237
+    name: purescript
+    version: 0.14.0
+    sha256: d0d93b1c7d055ba100c79b510541dc8e6c5c6723e5633fe3fc082048cc2b175b
+    pantry-tree:
+      size: 119113
+      sha256: 0dd96a8b9ced76a374422c8b995cfae756ee94ecc4a1eda21d8890b29a29313a
+  original:
+    subdir: .
+    url: https://github.com/purescript/purescript/archive/48634d05da1021ac1bcb4907461ae9b2d3b0e699.tar.gz
 - completed:
     hackage: serialise-0.2.2.0@sha256:6e8b89f437009ab30297a57de1a4bf2e3da5e5a086b96bf5cc278bdb7178f097,8356
     pantry-tree:

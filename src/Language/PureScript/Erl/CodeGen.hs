@@ -38,7 +38,8 @@ import Language.PureScript.Names
 import Language.PureScript.Types
 import Language.PureScript.Label 
 import Language.PureScript.Environment as E
-import qualified Language.PureScript.Constants as C
+import qualified Language.PureScript.Constants.Prelude as C
+import qualified Language.PureScript.Constants.Prim as C
 import Language.PureScript.Traversals (sndM)
 import Language.PureScript.AST (SourceSpan, nullSourceSpan, nullSourceAnn)
 
@@ -111,7 +112,7 @@ moduleToErl :: forall m .
   -> Module Ann
   -> [(T.Text, Int)]
   -> m ([T.Text], [Erl])
-moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExports =
+moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExports =
   rethrow (addHint (ErrorInModule mn)) $ do
     res <- traverse topBindToErl decls
     reexports <- traverse reExportForeign foreigns
