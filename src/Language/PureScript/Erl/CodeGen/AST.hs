@@ -93,6 +93,7 @@ data Erl
   -- Spec attribute
   | ESpec Text EType
   | EType Text [Text] EType
+  | EOpaque Text [Text] EType
 
   deriving (Show, Eq)
 
@@ -263,6 +264,7 @@ data BinaryOperator
 -- Simplified Erlang types
 data EType
   = TAny
+  
   | TNone
   | TPid
   | TPort

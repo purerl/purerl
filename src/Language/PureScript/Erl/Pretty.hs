@@ -68,7 +68,7 @@ literals = mkPattern' match
         ]
       _ -> [])
     <>
-    [ return $ printFunTy (runAtom x) t, return $ emit ".\n" ]
+    [ return $ printFunTy (Just $ length xs) (runAtom x) t, return $ emit ".\n" ]
     <>
     [ return $ emit $ runAtom x <> "(" <> intercalate "," xs <> ") -> "
     , prettyPrintErl' e
@@ -176,20 +176,21 @@ literals = mkPattern' match
     _ -> internalError "Did not expect non UTF8 safe attribute text"
 
   match (ESpec name ty) =
-    return $ printFunTy name (Just ty)
+    return $ printFunTy Nothing name (Just ty)
   match (EType name args ty) =
     return $ printTypeDef name args (Just ty)
 
   match _ = mzero
 
-  printFunTy name (Just (TFun ts ty)) =
+  printFunTy _ name (Just (TFun ts ty)) =
     emit $ "-spec " <> name <> "(" <> (T.intercalate "," $ printTy <$> ts) <> ") -> " <> printTy ty
-  printFunTy _ _ = emit ""
-
+  printFunTy (Just numArgs) name Nothing =
+    emit $ "-spec " <> name <> "(" <> (T.intercalate "," $ replicate numArgs "any()") <> ") -> any()"
+  printFunTy _ _ _ = internalError "Can't print spec for function with unknown arg length"
 
   printTypeDef name args (Just ty) =
     emit $ "-type " <> name <> "(" <> (T.intercalate "," args)  <>  ") :: " <> printTy ty
-  printTypeDef _ _ _ = emit ""
+  printTypeDef _ _ _ = emit "_empty_type_def"
 
 
   printTy TAny = "any()"

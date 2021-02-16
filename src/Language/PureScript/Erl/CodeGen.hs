@@ -133,6 +133,8 @@ erlDataList = ModuleName "Erl.Data.List"
 erlDataMap :: ModuleName
 erlDataMap = ModuleName "Erl.Data.Map"
 
+type ETypeEnv = Map T.Text ([T.Text], EType)
+
 -- |
 -- Generate code in the simplified Erlang intermediate representation for all declarations in a
 -- module.
@@ -142,7 +144,7 @@ moduleToErl :: forall m .
   => E.Environment
   -> Module Ann
   -> [(T.Text, Int)]
-  -> m ([T.Text], [Erl], [Erl])
+  -> m ([T.Text], [Erl], [Erl], [Erl])
 moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExports =
 
   -- translateType (TypeConstructor _ tname) | Just res <- M.lookup tname (E.names env)  = 
@@ -157,9 +159,9 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
     let exportTypes = mapMaybe (\(_,_,t) -> t) reexports
         typeEnv = M.unions $ map (snd . snd) exportTypes
         foreignSpecs = map (\(ident, (ty, _)) -> ESpec (runAtom $ qualifiedToErl' mn ForeignModule ident) ty) exportTypes
-        namedSpecs = map (\(name, (args, ty)) -> EType name args ty) $ M.toList typeEnv 
-        (exports, erlDecls) = biconcat $ res <> map (\(a,b,_) -> (a,b)) reexports
-    traceShowM ("namedSpecs", namedSpecs)
+        
+        (exports, erlDecls, typeEnv') = concatRes $ res <> map (\(a,b,c) -> (a, b, maybe M.empty (snd . snd) c)) reexports
+        namedSpecs = map (\(name, (args, ty)) -> EType name args ty) $ M.toList $ M.union typeEnv typeEnv'
     traverse_ checkExport foreigns
     let usedFfi = Set.fromList $ map runIdent foreigns
         definedFfi = Set.fromList (map fst foreignExports)
@@ -169,7 +171,7 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
 
     let attributes = findAttributes decls
 
-    return (map (\(a,i) -> runAtom a <> "/" <> T.pack (show i)) exports, namedSpecs ++ foreignSpecs, attributes ++ erlDecls)
+    return (map (\(a,i) -> runAtom a <> "/" <> T.pack (show i)) exports, namedSpecs, foreignSpecs, attributes ++ erlDecls)
   where
 
 
@@ -193,9 +195,8 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
       onBind (NonRec _ ident _) = catMaybes [ getType ident ]
       onBind (Rec vals) = mapMaybe onRecBind vals
 
-  biconcat :: [([a], [b])] -> ([a], [b])
-  biconcat x = (concatMap fst x, concatMap snd x)
-
+  concatRes :: [([a], [b], ETypeEnv)] -> ([a], [b], ETypeEnv)
+  concatRes x = (concatMap (\(a,_,_) -> a) x, concatMap (\(_, b, _) -> b) x, M.unions $ (\(_,_,c) -> c) <$> x)
 
   explicitArities :: M.Map (Qualified Ident) Int
   explicitArities = tyArity <$> types
@@ -208,7 +209,7 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
     in explicitArities `M.union` inferredMaxArities
 
   -- 're-export' foreign imports in the @ps module - also used for internal calls for non-exported foreign imports
-  reExportForeign :: Ident -> m ([(Atom,Int)], [Erl], Maybe (Ident, (EType, Map T.Text ([T.Text], EType))))
+  reExportForeign :: Ident -> m ([(Atom,Int)], [Erl], Maybe (Ident, (EType, ETypeEnv)))
   reExportForeign ident = do
 
     let arity = exportArity ident
@@ -216,7 +217,7 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
         wrap (ty, tenv) = case arity of 
                             0 -> Just (TFun [] ty, tenv)
                             _ -> (, tenv) <$> uncurryType arity ty
-        ty :: Maybe (EType, Map T.Text ([T.Text], EType))
+        ty :: Maybe (EType, ETypeEnv)
         ty = wrap =<< translateType <$> M.lookup (Qualified (Just mn) ident) types
 
     args <- replicateM fullArity freshNameErl
@@ -226,7 +227,7 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
     fident <- fmap (Ident . ("f" <>) . T.pack . show) fresh
     let var = Qualified Nothing fident
         wrap e = EBlock [ EVarBind (identToVar fident) fun, e ]
-    (idents, erl) <- generateFunctionOverloads Nothing (ssAnn nullSourceSpan) ident (Atom Nothing $ runIdent ident) (Var (ssAnn nullSourceSpan) var) wrap
+    (idents, erl, _env) <- generateFunctionOverloads Nothing (ssAnn nullSourceSpan) ident (Atom Nothing $ runIdent ident) (Var (ssAnn nullSourceSpan) var) wrap
     pure (idents, erl, (ident,) <$> ty)
 
   curriedLambda :: Erl -> [T.Text] -> Erl
@@ -262,9 +263,9 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
   findExport :: T.Text -> Maybe Int
   findExport n = snd <$> find ((n==) . fst) foreignExports
 
-  topBindToErl :: Bind Ann -> m ([(Atom,Int)], [Erl])
+  topBindToErl :: Bind Ann -> m ([(Atom,Int)], [Erl],ETypeEnv)
   topBindToErl (NonRec ann ident val) = topNonRecToErl ann ident val
-  topBindToErl (Rec vals) = biconcat <$> traverse (uncurry . uncurry $ topNonRecToErl) vals
+  topBindToErl (Rec vals) = concatRes <$> traverse (uncurry . uncurry $ topNonRecToErl) vals
 
   uncurriedFnArity' :: ModuleName -> T.Text -> Qualified Ident -> Maybe Int
   uncurriedFnArity' fnMod fn ident =
@@ -275,7 +276,7 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
   effFnArity = uncurriedFnArity' effectUncurried "EffectFn"
   fnArity = uncurriedFnArity' dataFunctionUncurried "Fn"
 
-  topNonRecToErl :: Ann -> Ident -> Expr Ann -> m ([(Atom,Int)], [ Erl ])
+  topNonRecToErl :: Ann -> Ident -> Expr Ann -> m ([(Atom,Int)], [ Erl ], ETypeEnv)
   topNonRecToErl (ss, _, _, _) ident val = do
     let eann@(_, _, _, meta') = extractAnn val
         ident' = case meta' of
@@ -285,16 +286,16 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
 
     generateFunctionOverloads (Just ss) eann ident ident' val id
 
-  generateFunctionOverloads :: Maybe SourceSpan -> Ann -> Ident -> Atom -> Expr Ann -> (Erl -> Erl)  -> m ([(Atom,Int)], [ Erl ])
+  generateFunctionOverloads :: Maybe SourceSpan -> Ann -> Ident -> Atom -> Expr Ann -> (Erl -> Erl)  -> m ([(Atom,Int)], [ Erl ], ETypeEnv)
   generateFunctionOverloads ss eann ident ident' val outerWrapper = do
     -- Always generate the plain curried form, f x y = ... -~~> f() -> fun (X) -> fun (Y) -> ... end end.
     let qident = Qualified (Just mn) ident
     erl <- valueToErl val
 
 
-    let translateType' = fst . translateType
-        erlangType = translateType' <$> M.lookup qident types
-
+    let translated = translateType <$> M.lookup qident types
+        erlangType = fst <$> translated
+        etypeEnv = maybe M.empty snd translated
 
     let curried = ( [ (ident', 0) ], [ EFunctionDef (TFun [] <$> erlangType) ss ident' [] (outerWrapper erl) ] )
     -- For effective > 0 (either plain curried funs, FnX or EffectFnX) generate an uncurried overload
@@ -315,15 +316,15 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
         pure ( [ (ident', arity) ], [ EFunctionDef (uncurryType arity =<< erlangType) ss ident' vars (outerWrapper (unwrap erl')) ] )
       _ -> pure ([], [])
 
-    let res = curried <> uncurried
+    let (res1, res2) = curried <> uncurried
     pure $ if ident `Set.member` declaredExportsSet
-            then res
-            else ([], snd res)
+            then (res1, res2, etypeEnv)
+            else ([], res2, etypeEnv)
 
-  translateType :: SourceType -> (EType, Map T.Text ([T.Text], EType))
+  translateType :: SourceType -> (EType, ETypeEnv)
   translateType = flip runState M.empty . go
     where
-    go :: SourceType -> State (Map T.Text ([T.Text], EType)) EType
+    go :: SourceType -> State (ETypeEnv) EType
     go = \case
       (TypeApp _ (TypeApp _ fn t1) t2) | fn == E.tyFunction ->
           TFun <$> sequence [ go t1 ] <*> go t2
@@ -377,7 +378,7 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
 
       _ -> pure TAny
  
-    goTCtor :: [EType] -> (Qualified (ProperName 'P.TypeName)) -> State (Map T.Text ([T.Text], EType)) EType
+    goTCtor :: [EType] -> (Qualified (ProperName 'P.TypeName)) -> State (ETypeEnv) EType
     goTCtor tyargs = \case
       tname
         | Just (_, t) <- M.lookup tname (E.typeSynonyms env)
@@ -408,7 +409,9 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
                                     pure $ case isNewtypeConstructor env (Qualified mn ctorName) of
                                         Just True -> head targs
                                         Just False -> TTuple (TAtom (Just $ toAtomName $ P.runProperName ctorName): targs)
-                                        Nothing -> TAny
+                                        Nothing -> 
+                                          -- TODO if we put this in the defining module maybe an opaque type would be useful to prevent some misuse
+                                          TAny
               tt <- traverse alt ctors
               put $ M.insert erlName (map (toVarName . fst) dtargs, TUnion tt) tenv
 
@@ -558,7 +561,8 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
     let (f, args) = unApp e []
     args' <- mapM valueToErl args
     case f of
-      Var (_, _, _, Just IsNewtype) _ -> return (head args')
+      Var (_, _, st, Just IsNewtype) _ -> 
+        return $ head args'
       Var (_, _, _, Just (IsConstructor _ fields)) (Qualified _ ident) | length args == length fields ->
         return $ constructorLiteral (runIdent ident) args'
       Var (_, _, _, Just IsTypeClassConstructor) name ->
