@@ -90,6 +90,9 @@ data Erl
   -- Attribute including raw text between the parens
   --
   | EAttribute PSString PSString
+  -- Spec attribute
+  | ESpec Text EType
+  | EType Text [Text] EType
 
   deriving (Show, Eq)
 
@@ -268,16 +271,17 @@ data EType
   | TAtom (Maybe Text)
   -- bitstring
   | TFloat
-  | TFunAny
+  -- | TFunAny
+  | TVar Text
   | TFun [EType] EType
   | TInteger -- no ranges
   | TList EType -- no improper lists
   -- maps
   | TMap (Maybe [(EType, EType)]) 
-  -- tuples
-  -- unions
+  | TTuple [EType]
+  | TUnion [EType]
   | TRemote Text Text [EType]
-  | TAlias Text
+  | TAlias Text [EType]
   deriving (Show, Eq)
 
 everywhereOnErl :: (Erl -> Erl) -> Erl -> Erl

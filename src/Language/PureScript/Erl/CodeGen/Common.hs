@@ -7,6 +7,7 @@ module Language.PureScript.Erl.CodeGen.Common
 , atom
 , atomModuleName
 , erlModuleName
+, erlModuleNameBase
 , ModuleType(..)
 , toAtomName
 , toVarName
@@ -106,11 +107,15 @@ atomModuleName :: ModuleName -> ModuleType -> Text
 atomModuleName = erlModuleName
 
 erlModuleName :: ModuleName -> ModuleType -> Text
-erlModuleName (ModuleName name) moduleType =
-  T.intercalate "_" (toAtomName <$> T.splitOn "." name) <>
-    case moduleType of
-      ForeignModule -> "@foreign"
-      PureScriptModule -> "@ps"
+erlModuleName mn moduleType = erlModuleNameBase mn <>
+  case moduleType of
+    ForeignModule -> "@foreign"
+    PureScriptModule -> "@ps"
+
+erlModuleNameBase :: ModuleName ->  Text
+erlModuleNameBase (ModuleName name) =
+  T.intercalate "_" (toAtomName <$> T.splitOn "." name) 
+
 
 toAtomName :: Text -> Text
 toAtomName text = case uncons text of
