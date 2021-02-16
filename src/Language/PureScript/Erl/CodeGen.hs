@@ -72,7 +72,8 @@ import Language.PureScript.Erl.CodeGen.Common
       atomModuleName,
       toAtomName,
       identToVar,
-      toVarName )
+      toVarName,
+      erlModuleNameBase )
 
 import Debug.Trace (traceM)
 import Debug (traceShowM)
@@ -378,12 +379,20 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
 
       _ -> pure TAny
  
+    erlTypeName :: (Qualified (ProperName 'P.TypeName)) -> T.Text
+    erlTypeName (Qualified mn' ident)
+      | Just mn'' <- mn'
+      , mn'' /= mn =
+          toAtomName $ erlModuleNameBase mn'' <> "_" <> P.runProperName ident
+      | otherwise =
+        toAtomName $ P.runProperName ident
+
     goTCtor :: [EType] -> (Qualified (ProperName 'P.TypeName)) -> State (ETypeEnv) EType
     goTCtor tyargs = \case
       tname
         | Just (_, t) <- M.lookup tname (E.typeSynonyms env)
         , (Qualified _mn ident) <- tname -> do
-        let erlName = toAtomName $ P.runProperName ident
+        let erlName = erlTypeName tname
         tenv <- get
         case M.lookup erlName tenv of
           Just _ -> pure ()
@@ -398,15 +407,15 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
         --  DataType [(Text, Maybe SourceKind)] [(ProperName 'ConstructorName, [SourceType])]
         , P.DataType dtargs (ctors :: [(ProperName 'P.ConstructorName, [SourceType])]) <- t
         -- can't ignore mn for external stuff
-        , (Qualified mn ident) <- tname -> do
-          let erlName = toAtomName $ P.runProperName ident
+        , (Qualified mn' ident) <- tname -> do
+          let erlName = erlTypeName tname
           tenv <- get
           case M.lookup erlName tenv of
             Just _ -> pure ()
             Nothing -> do
               let alt (ctorName, ctorArgs) = do
                                     targs <- traverse go ctorArgs
-                                    pure $ case isNewtypeConstructor env (Qualified mn ctorName) of
+                                    pure $ case isNewtypeConstructor env (Qualified mn' ctorName) of
                                         Just True -> head targs
                                         Just False -> TTuple (TAtom (Just $ toAtomName $ P.runProperName ctorName): targs)
                                         Nothing -> 
