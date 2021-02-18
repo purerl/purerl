@@ -68,7 +68,7 @@ literals = mkPattern' match
         ]
       _ -> [])
     <>
-    [ return $ printFunTy (Just $ length xs) (runAtom x) t, return $ emit ".\n" ]
+    [ return $ printFunTy (Just $ length xs) x t, return $ emit ".\n" ]
     <>
     [ return $ emit $ runAtom x <> "(" <> intercalate "," xs <> ") -> "
     , prettyPrintErl' e
@@ -183,14 +183,14 @@ literals = mkPattern' match
   match _ = mzero
 
   printFunTy _ name (Just (TFun ts ty)) =
-    emit $ "-spec " <> name <> "(" <> (T.intercalate "," $ printTy <$> ts) <> ") -> " <> printTy ty
+    emit $ "-spec " <> runAtom name <> "(" <> (T.intercalate "," $ printTy <$> ts) <> ") -> " <> printTy ty
   printFunTy (Just numArgs) name Nothing =
-    emit $ "-spec " <> name <> "(" <> (T.intercalate "," $ replicate numArgs "any()") <> ") -> any()"
+    emit $ "-spec " <> runAtom name <> "(" <> (T.intercalate "," $ replicate numArgs "any()") <> ") -> any()"
   printFunTy _ _ _ = internalError "Can't print spec for function with unknown arg length"
 
   printTypeDef name args (Just ty) =
-    emit $ "-type " <> name <> "(" <> (T.intercalate "," args)  <>  ") :: " <> printTy ty
-  printTypeDef _ _ _ = emit "_empty_type_def"
+    emit $ "-type " <> runAtom name <> "(" <> (T.intercalate "," args)  <>  ") :: " <> printTy ty
+  printTypeDef _ _ _ = internalError "Empty typedef"
 
 
   printTy TAny = "any()"
@@ -205,9 +205,9 @@ literals = mkPattern' match
   printTy (TFun ts tf) = "fun((" <> (T.intercalate "," $ printTy <$> ts) <> ") -> " <> printTy tf <> ")"
   -- printTy TFunAny
   printTy TFloat = "float()"
-  printTy (TAlias alias ts) = alias <> "(" <>  (T.intercalate "," $ printTy <$> ts) <> ")"
+  printTy (TAlias alias ts) = runAtom alias <> "(" <>  (T.intercalate "," $ printTy <$> ts) <> ")"
   printTy (TAtom Nothing) = "atom()"
-  printTy (TAtom (Just a)) = a
+  printTy (TAtom (Just a)) = runAtom a
   printTy (TList ts) = "list(" <> printTy ts <> ")"
   printTy (TMap Nothing) = "map()"
   printTy (TMap (Just ts)) = "#{"<> (T.intercalate "," $ (\(t1, t2) -> printTy t1 <> " => " <> printTy t2) <$> ts ) <> "}"

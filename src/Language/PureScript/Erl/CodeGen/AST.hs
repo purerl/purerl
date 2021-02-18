@@ -91,9 +91,9 @@ data Erl
   --
   | EAttribute PSString PSString
   -- Spec attribute
-  | ESpec Text EType
-  | EType Text [Text] EType
-  | EOpaque Text [Text] EType
+  | ESpec Atom EType
+  | EType Atom [Text] EType
+  | EOpaque Atom [Text] EType
 
   deriving (Show, Eq)
 
@@ -270,7 +270,7 @@ data EType
   | TPort
   | TReference
   | TNil
-  | TAtom (Maybe Text)
+  | TAtom (Maybe Atom)
   -- bitstring
   | TFloat
   -- | TFunAny
@@ -283,7 +283,7 @@ data EType
   | TTuple [EType]
   | TUnion [EType]
   | TRemote Text Text [EType]
-  | TAlias Text [EType]
+  | TAlias Atom [EType]
   deriving (Show, Eq)
 
 everywhereOnErl :: (Erl -> Erl) -> Erl -> Erl
