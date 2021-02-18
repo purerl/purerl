@@ -445,7 +445,7 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
                                     targs <- traverse go ctorArgs
                                     pure $ case isNewtypeConstructor env (Qualified mn' ctorName) of
                                         Just True -> head targs
-                                        Just False -> TTuple (TAtom (Just $ Atom Nothing $ P.runProperName ctorName): targs)
+                                        Just False -> TTuple (TAtom (Just $ Atom Nothing $ toAtomName $ P.runProperName ctorName): targs)
                                         Nothing -> 
                                           -- TODO if we put this in the defining module maybe an opaque type would be useful to prevent some misuse
                                           TAny
