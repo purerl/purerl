@@ -5,7 +5,8 @@
 --
 module Language.PureScript.Erl.Synonyms
   ( SynonymMap
-  , replaceAllTypeSynonymsM
+  , replaceRecordRowTypeSynonymsM
+  , replaceAllTypeSynonyms'
   ) where
 
 import           Prelude.Compat
@@ -23,9 +24,22 @@ import           Language.PureScript.Names
 import           Language.PureScript.TypeChecker.Monad
 import           Language.PureScript.Types
 
-
 -- | Type synonym information (arguments with kinds, aliased type), indexed by name
 type SynonymMap = M.Map (Qualified (ProperName 'TypeName)) ([(Text, Maybe SourceKind)], SourceType)
+
+replaceRecordRowTypeSynonyms'
+  :: SynonymMap
+  -> SourceType
+  -> Either MultipleErrors SourceType
+replaceRecordRowTypeSynonyms' syns = everywhereOnTypesTopDownM try
+  where
+  try :: SourceType -> Either MultipleErrors SourceType
+  try t = fromMaybe t <$> go t
+
+  go :: SourceType -> Either MultipleErrors (Maybe SourceType)
+  go t@(TypeApp _ tr t1) | tr == tyRecord 
+    = Just <$> replaceAllTypeSynonyms' syns t                   
+  go tt = return Nothing
 
 replaceAllTypeSynonyms'
   :: SynonymMap
@@ -46,12 +60,12 @@ replaceAllTypeSynonyms' syns = everywhereOnTypesTopDownM try
     , length synArgs > c
     = throwError . errorMessage $ InternalError "Partially applied type synonym"
   go c args (TypeApp _ f arg) = go (c + 1) (arg : args) f
-  go _ _ _ = return Nothing
+  go _ _ t = return Nothing
 
 -- | Replace fully applied type synonyms by explicitly providing a 'SynonymMap'.
-replaceAllTypeSynonymsM
+replaceRecordRowTypeSynonymsM
   :: MonadError MultipleErrors m
   => SynonymMap
   -> SourceType
   -> m SourceType
-replaceAllTypeSynonymsM syns = either throwError pure . replaceAllTypeSynonyms' syns
+replaceRecordRowTypeSynonymsM syns = either throwError pure . replaceRecordRowTypeSynonyms' syns

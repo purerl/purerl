@@ -75,7 +75,7 @@ import Language.PureScript.Erl.CodeGen.Common
       identToVar,
       toVarName,
       erlModuleNameBase )
-import Language.PureScript.Erl.Synonyms (replaceAllTypeSynonymsM)
+import Language.PureScript.Erl.Synonyms
 import Debug.Trace (traceM, trace, traceShowM, traceShow, traceShowId)
 import qualified Language.PureScript as P
 import qualified Language.PureScript.TypeChecker as T
@@ -224,17 +224,8 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
         wrap (ty, tenv) = case arity of 
                             0 -> Just (TFun [] ty, tenv)
                             _ -> (, tenv) <$> uncurryType arity ty
-    ty :: Maybe (EType, ETypeEnv) <- 
-      case M.lookup (Qualified (Just mn) ident) types of
-        Just t -> do
-          t' <- replaceAllTypeSynonymsM (typeSynonyms env) t
-          
-          pure $ traceShow t $if t == t' then 
-              wrap (translateType t')
-              else
-              traceShow (t, t') $
-                wrap (translateType t')
-        Nothing -> pure Nothing
+        ty :: Maybe (EType, ETypeEnv)
+        ty = wrap =<< translateType <$> M.lookup (Qualified (Just mn) ident) types
 
     args <- replicateM fullArity freshNameErl
     let body = EApp (EAtomLiteral $ qualifiedToErl' mn ForeignModule ident) (take arity $ map EVar args)
@@ -308,7 +299,6 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
     let qident = Qualified (Just mn) ident
     erl <- valueToErl val
 
-    
     let translated = translateType <$> M.lookup qident types
         erlangType = replaceVars <$> fst <$> translated
         etypeEnv = maybe M.empty snd translated
@@ -374,7 +364,9 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
       (TypeApp _ t1 t2) | t1 == ctorTy effect "Effect" ->
         TFun [] <$> go t2
       (TypeApp _ tr t1) | tr == tyRecord ->
-        TMap <$> row t1 []
+        let t1' = either (const t1) id $ replaceAllTypeSynonyms' (typeSynonyms env)  t1
+        in
+        TMap <$> row t1' []
           where
             row (REmpty _) acc = pure $ Just acc
             row (RCons _ label t ttail) acc = do
