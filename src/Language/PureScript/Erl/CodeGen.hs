@@ -25,6 +25,7 @@ import qualified Data.Map as M
 import Data.Map (Map)
 import Data.Maybe (fromMaybe, mapMaybe, catMaybes)
 import Control.Monad.Error.Class (MonadError(..))
+import Control.Monad.Error
 import Control.Applicative ((<|>))
 import Control.Arrow (first, second)
 import Control.Monad.Reader (MonadReader(..))
@@ -74,9 +75,10 @@ import Language.PureScript.Erl.CodeGen.Common
       identToVar,
       toVarName,
       erlModuleNameBase )
-
+import Language.PureScript.Erl.Synonyms (replaceAllTypeSynonymsM)
 import Debug.Trace (traceM, trace, traceShowM, traceShow, traceShowId)
 import qualified Language.PureScript as P
+import qualified Language.PureScript.TypeChecker as T
 import Control.Monad.State (State, put, modify, gets, runState, evalStateT, MonadState(..), StateT)
 
 
@@ -222,8 +224,18 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
         wrap (ty, tenv) = case arity of 
                             0 -> Just (TFun [] ty, tenv)
                             _ -> (, tenv) <$> uncurryType arity ty
-        ty :: Maybe (EType, ETypeEnv)
-        ty = wrap =<< translateType <$> M.lookup (Qualified (Just mn) ident) types
+    ty :: Maybe (EType, ETypeEnv) <- 
+      case M.lookup (Qualified (Just mn) ident) types of
+        Just t -> do
+          t' <- replaceAllTypeSynonymsM (typeSynonyms env) t
+          
+          pure $ traceShow t $if t == t' then 
+              wrap (translateType t')
+              else
+              traceShow (t, t') $
+                wrap (translateType t')
+        Nothing -> pure Nothing
+
     args <- replicateM fullArity freshNameErl
     let body = EApp (EAtomLiteral $ qualifiedToErl' mn ForeignModule ident) (take arity $ map EVar args)
         body' = curriedApp (drop arity $ map EVar args) body
@@ -738,3 +750,4 @@ moduleToErl env (Module _ _ mn _ _ declaredExports foreigns decls) foreignExport
     where isVar (EVar _) = True
           isVar _ = False
   irrefutable _ = False
+
