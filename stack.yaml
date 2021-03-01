@@ -12,7 +12,7 @@ extra-deps:
 - semialign-1
 # - purescript-0.13.8
 - github: purescript/purescript
-  commit: 48634d05da1021ac1bcb4907461ae9b2d3b0e699
+  commit: v0.14.0
   subdirs:
     - lib/purescript-ast
     - lib/purescript-cst

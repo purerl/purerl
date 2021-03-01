@@ -425,6 +425,11 @@ prettyPrintSingleError (PPEOptions codeColor full _level _showDocs relPath) e = 
                 , Box.vcat Box.left (map (typeAtomAsBox prettyDepth) ts)
                 ]
             ]
+    renderHint (MissingConstructorImportForCoercible name) detail =
+      paras
+        [ detail
+        , Box.moveUp 1 $ Box.moveRight 2 $ line $ "Solving this instance requires the newtype constructor " <> markCode (showQualified runProperName name) <> " to be in scope."
+        ]            
     renderHint (PositionedError srcSpan) detail =
       paras [ line $ "at " <> displaySourceSpan relPath (NEL.head srcSpan)
             , detail
