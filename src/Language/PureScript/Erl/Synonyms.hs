@@ -13,7 +13,6 @@ module Language.PureScript.Erl.Synonyms
 import           Prelude.Compat
 
 import           Control.Monad.Error.Class (MonadError(..))
-import           Control.Monad.State
 import           Data.Maybe (fromMaybe)
 import qualified Data.Map as M
 import           Data.Text (Text)
@@ -21,7 +20,6 @@ import           Language.PureScript.Environment
 import           Language.PureScript.Erl.Errors
 import           Language.PureScript.Erl.Errors.Types
 import           Language.PureScript.Names
-import           Language.PureScript.TypeChecker.Monad
 import           Language.PureScript.Types
 import           Language.PureScript.AST
 
@@ -41,9 +39,9 @@ replaceRecordRowTypeSynonyms' syns kinds = everywhereOnTypesTopDownM try
   try t = fromMaybe t <$> go t
 
   go :: SourceType -> Either MultipleErrors (Maybe SourceType)
-  go t@(TypeApp _ tr t1) | tr == tyRecord 
+  go t@(TypeApp _ tr _) | tr == tyRecord 
     = Just <$> replaceAllTypeSynonyms' syns kinds t                   
-  go tt = return Nothing
+  go _ = return Nothing
 
 replaceAllTypeSynonyms'
   :: SynonymMap
@@ -56,7 +54,7 @@ replaceAllTypeSynonyms' syns kinds = everywhereOnTypesTopDownM try
   try t = fromMaybe t <$> go (fst $ getAnnForType t) 0 [] [] t
 
   go :: SourceSpan -> Int -> [SourceType] -> [SourceType] -> SourceType -> Either MultipleErrors (Maybe SourceType)
-  go ss c kargs args (TypeConstructor _ ctor)
+  go _ c kargs args (TypeConstructor _ ctor)
     | Just (synArgs, body) <- M.lookup ctor syns
     , c == length synArgs
     , kindArgs <- lookupKindArgs ctor

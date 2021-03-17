@@ -25,7 +25,6 @@ import qualified Data.Map as M
 import Data.Map (Map)
 import Data.Maybe (fromMaybe, mapMaybe, catMaybes)
 import Control.Monad.Error.Class (MonadError(..))
-import Control.Monad.Error
 import Control.Applicative ((<|>))
 import Control.Arrow (first, second)
 import Control.Monad.Reader (MonadReader(..))
@@ -70,17 +69,15 @@ import Language.PureScript.Erl.Errors (MultipleErrors, rethrow, rethrowWithPosit
 import Language.PureScript.Erl.CodeGen.Common
     ( ModuleType(ForeignModule, PureScriptModule),
       runAtom,
-      atomPS,
       atomModuleName,
       toAtomName,
       identToVar,
       toVarName,
       erlModuleNameBase )
 import Language.PureScript.Erl.Synonyms
-import Debug.Trace (traceM, trace, traceShowM, traceShow, traceShowId)
+import Debug.Trace (traceM, trace)
 import qualified Language.PureScript as P
-import qualified Language.PureScript.TypeChecker as T
-import Control.Monad.State (State, put, modify, gets, runState, evalStateT, MonadState(..), StateT)
+import Control.Monad.State (State, modify, runState, MonadState(..))
 
 
 freshNameErl :: (MonadSupply m) => m T.Text
@@ -121,6 +118,7 @@ uncurriedFnTypes moduleName fnName = check <=< collectTypeApp
       if n >= 1 && n <= 10 && fnN == (fnName <> T.pack (show n)) && mn == moduleName
       then Just (n, tys)
       else Nothing
+    check _ = Nothing
 
 uncurriedFnArity :: ModuleName -> T.Text -> SourceType -> Maybe Int
 uncurriedFnArity moduleName fnName ty = fst <$> uncurriedFnTypes moduleName fnName ty
@@ -222,11 +220,11 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
 
     let arity = exportArity ident
         fullArity = fromMaybe arity (M.lookup (Qualified (Just mn) ident) arities)
-        wrap (ty, tenv) = case arity of 
-                            0 -> Just (TFun [] ty, tenv)
-                            _ -> (, tenv) <$> uncurryType arity ty
+        wrapTy (ty', tenv) = case arity of 
+                            0 -> Just (TFun [] ty', tenv)
+                            _ -> (, tenv) <$> uncurryType arity ty'
         ty :: Maybe (EType, ETypeEnv)
-        ty = wrap =<< translateType <$> M.lookup (Qualified (Just mn) ident) types
+        ty = wrapTy =<< translateType <$> M.lookup (Qualified (Just mn) ident) types
 
     args <- replicateM fullArity freshNameErl
     let body = EApp (EAtomLiteral $ qualifiedToErl' mn ForeignModule ident) (take arity $ map EVar args)
@@ -421,7 +419,7 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
       tname
         | Just (args, t) <- M.lookup tname (E.typeSynonyms env)
         , length args == length tyargs
-        , (Qualified _mn ident) <- tname -> do
+        , (Qualified _mn _ident) <- tname -> do
         let erlName = erlTypeName tname
         M.lookup erlName <$> get >>= \case
           Just _ -> 
@@ -439,7 +437,7 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
         , DataType _dt dtargs (ctors :: [(ProperName 'P.ConstructorName, [SourceType])]) <- t
         , length dtargs == length tyargs
         -- can't ignore mn for external stuff
-        , (Qualified mn' ident) <- tname
+        , (Qualified mn' _ident) <- tname
         -> do
           let erlName = erlTypeName tname
           M.lookup erlName <$> get >>= \case
@@ -463,11 +461,11 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
 
           pure $ TAlias (Atom Nothing erlName) tyargs
       -- not a data type/alias we can find or not fully applied
-      tname -> pure TAny
+      _ -> pure TAny
 
   lookupConstructor :: Environment -> Qualified (P.ProperName 'P.ConstructorName) -> Maybe (P.DataDeclType, ProperName 'P.TypeName, P.SourceType, [Ident])
-  lookupConstructor env ctor =
-    ctor `M.lookup` P.dataConstructors env
+  lookupConstructor env' ctor =
+    ctor `M.lookup` P.dataConstructors env'
 
   -- | Checks whether a data constructor is for a newtype.
   isNewtypeConstructor :: Environment -> Qualified (P.ProperName 'P.ConstructorName) -> Maybe Bool
@@ -608,7 +606,7 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
     let (f, args) = unApp e []
     args' <- mapM valueToErl args
     case f of
-      Var (_, _, st, Just IsNewtype) _ -> 
+      Var (_, _, _, Just IsNewtype) _ -> 
         return $ head args'
       Var (_, _, _, Just (IsConstructor _ fields)) (Qualified _ ident) | length args == length fields ->
         return $ constructorLiteral (runIdent ident) args'

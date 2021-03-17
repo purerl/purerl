@@ -60,14 +60,14 @@ literals = mkPattern' match
     ]
 
   match (EFunctionDef t ss x xs e) = mconcat <$> sequence (
-    -- (case ss of
-    --   (Just SourceSpan { spanName = spanName, spanStart = spanStart }) -> 
-    --     [ do 
-    --         tf <- transformFilename <$> get
-    --         return $ emit $ "-file(\"" <> T.pack (tf spanName) <> "\", " <> T.pack (show $ sourcePosLine spanStart) <> ").\n"
-    --     ]
-    --   _ -> [])
-    -- <>
+    (case ss of
+      (Just SourceSpan { spanName = spanName, spanStart = spanStart }) -> 
+        [ do 
+            tf <- transformFilename <$> get
+            return $ emit $ "-file(\"" <> T.pack (tf spanName) <> "\", " <> T.pack (show $ sourcePosLine spanStart) <> ").\n"
+        ]
+      _ -> [])
+    <>
     [ return $ printFunTy (Just $ length xs) x t, return $ emit ".\n" ]
     <>
     [ return $ emit $ runAtom x <> "(" <> intercalate "," xs <> ") -> "
