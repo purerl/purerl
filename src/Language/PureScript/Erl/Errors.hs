@@ -78,6 +78,7 @@ errorCode em = case unwrapErrorMessage em of
   UnusedFFIImplementations{} -> "UnusedFFIImplementations"
   InvalidFFIArity{} -> "InvalidFFIArity"
   FileIOError{} -> "FileIOError"
+  InternalError{} -> "InternalError"
 
 
 -- | A stack trace for an error
@@ -253,6 +254,10 @@ prettyPrintSingleError (PPEOptions codeColor full _level _showDocs relPath) e = 
     renderSimpleErrorMessage (FileIOError doWhat err) =
       paras [ line $ "I/O error while trying to " <> doWhat
             , indent . lineS $ displayException err
+            ]
+
+    renderSimpleErrorMessage (InternalError text) =
+      paras [ line $ "Internal error: " <> text
             ]
 
     renderSimpleErrorMessage (MissingFFIModule mn) =

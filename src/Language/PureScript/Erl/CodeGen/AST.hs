@@ -90,6 +90,10 @@ data Erl
   -- Attribute including raw text between the parens
   --
   | EAttribute PSString PSString
+  -- Spec attribute
+  | ESpec Atom EType
+  | EType Atom [Text] EType
+  | EOpaque Atom [Text] EType
 
   deriving (Show, Eq)
 
@@ -260,24 +264,26 @@ data BinaryOperator
 -- Simplified Erlang types
 data EType
   = TAny
+  
   | TNone
   | TPid
   | TPort
   | TReference
   | TNil
-  | TAtom (Maybe Text)
+  | TAtom (Maybe Atom)
   -- bitstring
   | TFloat
-  | TFunAny
+  -- | TFunAny
+  | TVar Text
   | TFun [EType] EType
   | TInteger -- no ranges
   | TList EType -- no improper lists
   -- maps
   | TMap (Maybe [(EType, EType)]) 
-  -- tuples
-  -- unions
+  | TTuple [EType]
+  | TUnion [EType]
   | TRemote Text Text [EType]
-  | TAlias Text
+  | TAlias Atom [EType]
   deriving (Show, Eq)
 
 everywhereOnErl :: (Erl -> Erl) -> Erl -> Erl

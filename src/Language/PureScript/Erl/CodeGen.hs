@@ -13,17 +13,19 @@ import Prelude.Compat
 import Language.PureScript.Erl.CodeGen.AST as AST
 
 import qualified Data.Text as T
-import Data.Traversable
-import Data.Foldable
+import Data.Traversable ( forM )
+import Data.Foldable ( find, traverse_ )
 import Data.List (nub)
-import Control.Monad (unless, replicateM)
+import Control.Monad (unless, replicateM, (<=<))
 
 import qualified Data.Set as Set
 import Data.Set (Set)
 
 import qualified Data.Map as M
+import Data.Map (Map)
 import Data.Maybe (fromMaybe, mapMaybe, catMaybes)
 import Control.Monad.Error.Class (MonadError(..))
+import Control.Monad.Error
 import Control.Applicative ((<|>))
 import Control.Arrow (first, second)
 import Control.Monad.Reader (MonadReader(..))
@@ -33,21 +35,53 @@ import Control.Monad.Supply.Class
 
 import Language.PureScript.CoreFn hiding (moduleExports)
 import Language.PureScript.Errors (ErrorMessageHint(..))
-import Language.PureScript.Options
+import Language.PureScript.Options ( Options )
 import Language.PureScript.Names
+    ( runIdent,
+      showIdent,
+      showQualified,
+      Ident(UnusedIdent, Ident),
+      ModuleName(..),
+      ProperName(ProperName),
+      Qualified(..) )
 import Language.PureScript.Types
-import Language.PureScript.Label 
+    ( SourceType,
+      Type(..) )
+import Language.PureScript.Label ( Label(runLabel) )
 import Language.PureScript.Environment as E
+    ( Environment(names, types, typeSynonyms),
+      TypeKind(..),
+      tyArray,
+      tyBoolean,
+      tyFunction,
+      tyInt,
+      tyNumber,
+      tyRecord,
+      tyString )
 import qualified Language.PureScript.Constants.Prelude as C
 import qualified Language.PureScript.Constants.Prim as C
 import Language.PureScript.Traversals (sndM)
 import Language.PureScript.AST (SourceSpan, nullSourceSpan, nullSourceAnn)
 
 import Language.PureScript.Erl.Errors.Types
+    ( SimpleErrorMessage(UnusedFFIImplementations,
+                         MissingFFIImplementations, InvalidFFIArity) )
 import Language.PureScript.Erl.Errors (MultipleErrors, rethrow, rethrowWithPosition, addHint, errorMessage)
 import Language.PureScript.Erl.CodeGen.Common
+    ( ModuleType(ForeignModule, PureScriptModule),
+      runAtom,
+      atomPS,
+      atomModuleName,
+      toAtomName,
+      identToVar,
+      toVarName,
+      erlModuleNameBase )
+import Language.PureScript.Erl.Synonyms
+import Debug.Trace (traceM, trace, traceShowM, traceShow, traceShowId)
+import qualified Language.PureScript as P
+import qualified Language.PureScript.TypeChecker as T
+import Control.Monad.State (State, put, modify, gets, runState, evalStateT, MonadState(..), StateT)
 
-import Debug.Trace (traceM)
 
 freshNameErl :: (MonadSupply m) => m T.Text
 freshNameErl = fmap (("_@" <>) . T.pack . show) fresh
@@ -66,22 +100,27 @@ isTopLevelBinding (Qualified Nothing _) = False
 tyArity :: SourceType -> Int
 tyArity (TypeApp _ (TypeApp _ fn _) ty) | fn == E.tyFunction = 1 + tyArity ty
 tyArity (ForAll _ _ _ ty _) = tyArity ty
-tyArity (ConstrainedType _ _ ty) = 1 + tyArity ty 
+tyArity (ConstrainedType _ _ ty) = 1 + tyArity ty
 tyArity _ = 0
 
-uncurriedFnTypes :: ModuleName -> T.Text -> SourceType -> Maybe (Int,[SourceType])
-uncurriedFnTypes moduleName fnName = go []
+collectTypeApp :: SourceType -> Maybe (Qualified (ProperName 'P.TypeName), [SourceType])
+collectTypeApp = go []
   where
-    go :: [SourceType] -> SourceType -> Maybe (Int, [SourceType])
-    go acc (TypeConstructor _ (Qualified (Just mn) (ProperName fnN)))
-      | n <- length acc - 1
-      , n >= 1, n <= 10, fnN == (fnName <> T.pack (show n)), mn == moduleName
-      = Just (n, reverse acc)
+    go acc (TypeConstructor _ tc) = Just (tc, acc)
     go acc (TypeApp _ t1 t2) = go (t2:acc) t1
     go acc (ForAll _ _ _ ty _) = go acc ty
     go _ _ = Nothing
 
-
+uncurriedFnTypes :: ModuleName -> T.Text -> SourceType -> Maybe (Int,[SourceType])
+uncurriedFnTypes moduleName fnName = check <=< collectTypeApp 
+  where
+    check :: (Qualified (ProperName 'P.TypeName), [SourceType]) -> Maybe (Int,[SourceType])
+    check (Qualified (Just mn) (ProperName fnN), tys)  =
+      let n = length tys - 1
+      in
+      if n >= 1 && n <= 10 && fnN == (fnName <> T.pack (show n)) && mn == moduleName
+      then Just (n, tys)
+      else Nothing
 
 uncurriedFnArity :: ModuleName -> T.Text -> SourceType -> Maybe Int
 uncurriedFnArity moduleName fnName ty = fst <$> uncurriedFnTypes moduleName fnName ty
@@ -101,6 +140,7 @@ erlDataList = ModuleName "Erl.Data.List"
 erlDataMap :: ModuleName
 erlDataMap = ModuleName "Erl.Data.Map"
 
+type ETypeEnv = Map T.Text ([T.Text], EType)
 
 -- |
 -- Generate code in the simplified Erlang intermediate representation for all declarations in a
@@ -111,13 +151,25 @@ moduleToErl :: forall m .
   => E.Environment
   -> Module Ann
   -> [(T.Text, Int)]
-  -> m ([T.Text], [Erl])
+  -> m ([T.Text], [Erl], [Erl], [Erl])
 moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExports =
+
+  -- translateType (TypeConstructor _ tname) | Just res <- M.lookup tname (E.names env)  = 
+  --   traceShow res TAny
+
   rethrow (addHint (ErrorInModule mn)) $ do
+    
+    -- traceShowM $ M.filterWithKey (\(Qualified  mn' _) _ -> mn' == Just (ModuleName "Test")) (E.types env)
+
     res <- traverse topBindToErl decls
     reexports <- traverse reExportForeign foreigns
-    let (exports, erlDecls) = biconcat $ res <> reexports
-
+    let exportTypes = mapMaybe (\(_,_,t) -> t) reexports
+        typeEnv = M.unions $ map (snd . snd) exportTypes
+        foreignSpecs = map (\(ident, (ty, _)) -> ESpec (qualifiedToErl' mn ForeignModule ident) (replaceVars ty)) exportTypes
+        
+        (exports, erlDecls, typeEnv') = concatRes $ res <> map (\(a,b,c) -> (a, b, maybe M.empty (snd . snd) c)) reexports
+        namedSpecs = map (\(name, (args, ty)) -> EType (Atom Nothing name) args ty) $ M.toList $ M.union typeEnv typeEnv'
+     
     traverse_ checkExport foreigns
     let usedFfi = Set.fromList $ map runIdent foreigns
         definedFfi = Set.fromList (map fst foreignExports)
@@ -127,8 +179,10 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
 
     let attributes = findAttributes decls
 
-    return (map (\(a,i) -> runAtom a <> "/" <> T.pack (show i)) exports, attributes ++ erlDecls)
+    return (map (\(a,i) -> runAtom a <> "/" <> T.pack (show i)) exports, namedSpecs, foreignSpecs, attributes ++ erlDecls)
   where
+
+
 
   types :: M.Map (Qualified Ident) SourceType
   types = M.map (\(t, _, _) -> t) $ E.names env
@@ -149,24 +203,31 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
       onBind (NonRec _ ident _) = catMaybes [ getType ident ]
       onBind (Rec vals) = mapMaybe onRecBind vals
 
-  biconcat :: [([a], [b])] -> ([a], [b])
-  biconcat x = (concatMap fst x, concatMap snd x)
+  concatRes :: [([a], [b], ETypeEnv)] -> ([a], [b], ETypeEnv)
+  concatRes x = (concatMap (\(a,_,_) -> a) x, concatMap (\(_, b, _) -> b) x, M.unions $ (\(_,_,c) -> c) <$> x)
 
   explicitArities :: M.Map (Qualified Ident) Int
   explicitArities = tyArity <$> types
 
   arities :: M.Map (Qualified Ident) Int
-  arities = 
+  arities =
     -- max arities is max of actual impl and most saturated application
     let actualArities = M.fromList $ map (\(x, n) -> (Qualified (Just mn) (Ident x), n)) foreignExports
         inferredMaxArities = foldr findApps actualArities decls
     in explicitArities `M.union` inferredMaxArities
 
   -- 're-export' foreign imports in the @ps module - also used for internal calls for non-exported foreign imports
-  reExportForeign :: Ident -> m ([(Atom,Int)], [Erl])
+  reExportForeign :: Ident -> m ([(Atom,Int)], [Erl], Maybe (Ident, (EType, ETypeEnv)))
   reExportForeign ident = do
+
     let arity = exportArity ident
         fullArity = fromMaybe arity (M.lookup (Qualified (Just mn) ident) arities)
+        wrap (ty, tenv) = case arity of 
+                            0 -> Just (TFun [] ty, tenv)
+                            _ -> (, tenv) <$> uncurryType arity ty
+        ty :: Maybe (EType, ETypeEnv)
+        ty = wrap =<< translateType <$> M.lookup (Qualified (Just mn) ident) types
+
     args <- replicateM fullArity freshNameErl
     let body = EApp (EAtomLiteral $ qualifiedToErl' mn ForeignModule ident) (take arity $ map EVar args)
         body' = curriedApp (drop arity $ map EVar args) body
@@ -174,7 +235,8 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
     fident <- fmap (Ident . ("f" <>) . T.pack . show) fresh
     let var = Qualified Nothing fident
         wrap e = EBlock [ EVarBind (identToVar fident) fun, e ]
-    generateFunctionOverloads Nothing (ssAnn nullSourceSpan) ident (Atom Nothing $ runIdent ident) (Var (ssAnn nullSourceSpan) var) wrap
+    (idents, erl, _env) <- generateFunctionOverloads Nothing (ssAnn nullSourceSpan) ident (Atom Nothing $ runIdent ident) (Var (ssAnn nullSourceSpan) var) wrap
+    pure (idents, erl, (ident,) <$> ty)
 
   curriedLambda :: Erl -> [T.Text] -> Erl
   curriedLambda = foldr (EFun1 Nothing)
@@ -187,13 +249,13 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
     case (findExport (runIdent ident), M.lookup (Qualified (Just mn) ident) explicitArities) of
       -- TODO is it meaningful to check against inferred arities (as we are just now) or only explicit ones
       -- This probably depends on the current codegen
-      
+
       -- If we know the foreign import type (because it was exported) and the actual FFI type, it is an error if
       -- the actual implementation has higher arity than the type does
       -- If the actual implementation has lower arity, it may be just returning a function
       (Just m, Just n) | m > n ->
         throwError . errorMessage $ InvalidFFIArity mn (runIdent ident) m n
-      
+
       -- If we don't know the declared type of the foreign import (because it is not exported), then we cannot say
       -- what the implementation's arity should be, as it may be higher than can be inferred from applications in this
       -- module (because there is no fully saturated application) or lower (because the ffi returns a function)
@@ -209,9 +271,9 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
   findExport :: T.Text -> Maybe Int
   findExport n = snd <$> find ((n==) . fst) foreignExports
 
-  topBindToErl :: Bind Ann -> m ([(Atom,Int)], [Erl])
+  topBindToErl :: Bind Ann -> m ([(Atom,Int)], [Erl],ETypeEnv)
   topBindToErl (NonRec ann ident val) = topNonRecToErl ann ident val
-  topBindToErl (Rec vals) = biconcat <$> traverse (uncurry . uncurry $ topNonRecToErl) vals
+  topBindToErl (Rec vals) = concatRes <$> traverse (uncurry . uncurry $ topNonRecToErl) vals
 
   uncurriedFnArity' :: ModuleName -> T.Text -> Qualified Ident -> Maybe Int
   uncurriedFnArity' fnMod fn ident =
@@ -219,28 +281,29 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
       Just t -> uncurriedFnArity fnMod fn t
       _ -> Nothing
 
-  effFnArity = uncurriedFnArity' effectUncurried "EffectFn" 
+  effFnArity = uncurriedFnArity' effectUncurried "EffectFn"
   fnArity = uncurriedFnArity' dataFunctionUncurried "Fn"
-      
-  topNonRecToErl :: Ann -> Ident -> Expr Ann -> m ([(Atom,Int)], [ Erl ])
+
+  topNonRecToErl :: Ann -> Ident -> Expr Ann -> m ([(Atom,Int)], [ Erl ], ETypeEnv)
   topNonRecToErl (ss, _, _, _) ident val = do
     let eann@(_, _, _, meta') = extractAnn val
         ident' = case meta' of
           Just IsTypeClassConstructor -> identToTypeclassCtor ident
           _ -> Atom Nothing $ runIdent ident
-        
+
 
     generateFunctionOverloads (Just ss) eann ident ident' val id
 
-  generateFunctionOverloads :: Maybe SourceSpan -> Ann -> Ident -> Atom -> Expr Ann -> (Erl -> Erl)  -> m ([(Atom,Int)], [ Erl ])
+  generateFunctionOverloads :: Maybe SourceSpan -> Ann -> Ident -> Atom -> Expr Ann -> (Erl -> Erl)  -> m ([(Atom,Int)], [ Erl ], ETypeEnv)
   generateFunctionOverloads ss eann ident ident' val outerWrapper = do
     -- Always generate the plain curried form, f x y = ... -~~> f() -> fun (X) -> fun (Y) -> ... end end.
     let qident = Qualified (Just mn) ident
     erl <- valueToErl val
 
-    let erlangType = translateType <$> M.lookup qident types
-
-
+    let translated = translateType <$> M.lookup qident types
+        erlangType = replaceVars <$> fst <$> translated
+        etypeEnv = maybe M.empty snd translated
+    
     let curried = ( [ (ident', 0) ], [ EFunctionDef (TFun [] <$> erlangType) ss ident' [] (outerWrapper erl) ] )
     -- For effective > 0 (either plain curried funs, FnX or EffectFnX) generate an uncurried overload
     -- f x y = ... -~~> f(X,Y) -> ((...)(X))(Y).
@@ -260,57 +323,170 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
         pure ( [ (ident', arity) ], [ EFunctionDef (uncurryType arity =<< erlangType) ss ident' vars (outerWrapper (unwrap erl')) ] )
       _ -> pure ([], [])
 
-    let res = curried <> uncurried
-    pure $ if ident `Set.member` declaredExportsSet 
-            then res
-            else ([], snd res)
+    let (res1, res2) = curried <> uncurried
+    pure $ if ident `Set.member` declaredExportsSet
+            then (res1, res2, etypeEnv)
+            else ([], res2, etypeEnv)
 
-  translateType :: SourceType -> EType
-  translateType (TypeApp _ (TypeApp _ fn t1) t2) | fn == E.tyFunction = TFun [ translateType t1 ] (translateType t2)
-  translateType ty | ty == E.tyInt = TInteger
-  translateType ty | ty == E.tyNumber = TFloat
-  translateType ty | ty == E.tyString = TAlias "binary"
-  translateType ty | ty == E.tyBoolean = TAlias "boolean"
-  translateType (TypeApp _ t1 t2) | t1 == E.tyArray = TRemote "array" "array" [translateType t2]
-  translateType (TypeApp _ t1 t2) | t1 == ctorTy erlDataList "List" = TList $ translateType t2
-  translateType (TypeApp _ (TypeApp _ t t1) t2) | t == ctorTy erlDataMap "Map" = TMap (Just [(translateType t1, translateType t2)])
-  translateType (TypeApp _ t1 t2) | t1 == ctorTy effect "Effect" = TFun [] $ translateType t2
-  
-  translateType (TypeApp _ tr t1) | tr == tyRecord = TMap $ row t1 []
+  -- substitute any() for any var X, for use in specs
+  replaceVars :: EType -> EType
+  replaceVars = go
     where
-      row (REmpty _) acc = Just acc
-      row (RCons _ label t ttail) acc = row ttail ((TAtom $ Just $ atomPS $ runLabel label, translateType t) : acc)
-      row (TypeVar _ _) _ = Nothing
-      row t _ = error $ "Shouldn't find random type in row list: " <> show t
+    go = \case
+      TVar _ -> TAny
+      TFun args res -> TFun (go <$> args) (go res)
+      TList arg -> TList $ go arg
+      TMap (Just args) -> TMap $ Just $ map (\(a,b) -> (go a, go b)) args
+      TTuple args -> TTuple $ go <$> args
+      TUnion args -> TUnion $ go <$> args
+      TRemote a b args -> TRemote a b $ go <$> args
+      TAlias x args -> TAlias x $ go <$> args
+      z -> z
 
-  translateType (ForAll _ _ _ ty _) = translateType ty
-  translateType (ConstrainedType _ _ ty) = TFun [ TAny ] (translateType ty)
+  translateType :: SourceType -> (EType, ETypeEnv)
+  translateType = flip runState M.empty . go 
+    where
+    go :: SourceType -> State (ETypeEnv) EType
+    go = \case
+      (TypeApp _ (TypeApp _ fn t1) t2) | fn == E.tyFunction ->
+          TFun <$> sequence [ go t1 ] <*> go t2
+      ty | ty == E.tyInt -> pure TInteger
+      ty | ty == E.tyNumber -> pure TFloat
+      ty | ty == E.tyString -> pure $ TAlias (Atom Nothing "binary") []
+      ty | ty == E.tyBoolean -> pure $ TAlias (Atom Nothing "boolean") []
+      (TypeApp _ t1 t2) | t1 == E.tyArray ->
+        TRemote "array" "array" . pure <$> go t2
+      (TypeApp _ t1 t2) | t1 == ctorTy erlDataList "List" ->
+        TList <$> go t2
+      (TypeApp _ (TypeApp _ t t1) t2) | t == ctorTy erlDataMap "Map" -> do
+        rT1 <- go t1
+        rT2 <- go t2
+        pure $ TMap $ Just [(rT1, rT2)]
+      (TypeApp _ t1 t2) | t1 == ctorTy effect "Effect" ->
+        TFun [] <$> go t2
+      (TypeApp _ tr t1) | tr == tyRecord ->
+        let t1' = either (const t1) id $ replaceAllTypeSynonyms' (E.typeSynonyms env) (E.types env) t1
+        in
+        TMap <$> row t1' []
+          where
+            row (REmpty _) acc = pure $ Just acc
+            row (RCons _ label t ttail) acc = do
+              tt <- go t
+              row ttail ((TAtom $ Just $ AtomPS Nothing $ runLabel label, tt) : acc)
+            row (TypeVar _ _) _ = pure Nothing
+            row (KindApp _ ty _) acc = row ty acc
+            row t _ = 
+              trace ("Shouldn't find random type in row list: " <> show t) $ pure Nothing
+                -- 
+      (KindApp _ ty _) -> go ty
+      (ForAll _ _ _ ty _) -> go ty
+      (ConstrainedType _ _ ty) -> TFun [ TAny ] <$> go ty
 
 
-  translateType ty
-    | Just (_, fnTypes) <- uncurriedFnTypes dataFunctionUncurried "Fn" ty
-    , tret <- last fnTypes
-    , targs <- take (length fnTypes -1 ) fnTypes
-    = TFun (translateType <$> targs) (translateType tret)
-  translateType ty
-    | Just (_, fnTypes) <- uncurriedFnTypes effectUncurried "EffectFn" ty
-    , tret <- last fnTypes
-    , targs <- take (length fnTypes -1 ) fnTypes
-    = TFun (translateType <$> targs) (translateType tret)
-    
-  translateType _ = TAny
+      ty
+        | Just (_, fnTypes) <- uncurriedFnTypes dataFunctionUncurried "Fn" ty
+        , tret <- last fnTypes
+        , targs <- take (length fnTypes -1 ) fnTypes
+        -> TFun <$> (traverse go targs) <*> (go tret)
+      ty
+        | Just (_, fnTypes) <- uncurriedFnTypes effectUncurried "EffectFn" ty
+        , tret <- last fnTypes
+        , targs <- take (length fnTypes -1 ) fnTypes
+        -> TFun <$> (traverse go targs) <*> (go tret)
+            
+      t@(TypeApp _ _ _) 
+        | Just (tname, tys) <- collectTypeApp t 
+        -> do
+          etys <- traverse go tys
+          -- traceShowM ("collected application", tname, etys, M.lookup tname (E.typeSynonyms env), M.lookup tname (E.types env))
+          res <- goTCtor etys tname
+          -- traceShowM ("and done for", tname)
+          pure res
+
+      (TypeVar _ var) -> pure $ TVar $ "_" <> toVarName var
+
+      _ -> pure TAny
+ 
+    erlTypeName :: (Qualified (ProperName 'P.TypeName)) -> T.Text
+    erlTypeName (Qualified mn' ident)
+      | Just mn'' <- mn' =
+      -- TODO this is easier to read but clashes builtins
+      -- , mn'' /= mn = 
+          toAtomName $ erlModuleNameBase mn'' <> "_" <> P.runProperName ident
+      | otherwise =
+        toAtomName $ P.runProperName ident
+
+    goTCtor :: [EType] -> (Qualified (ProperName 'P.TypeName)) -> State (ETypeEnv) EType
+    goTCtor tyargs = \case
+      tname
+        | Just (args, t) <- M.lookup tname (E.typeSynonyms env)
+        , length args == length tyargs
+        , (Qualified _mn ident) <- tname -> do
+        let erlName = erlTypeName tname
+        M.lookup erlName <$> get >>= \case
+          Just _ -> 
+            pure ()
+          Nothing -> do
+            -- dummy to prevent recursing
+            modify (M.insert erlName (map (("_" <>) . toVarName . fst) args, TAny))
+            tt <- go t
+            modify (M.insert erlName (map (("_" <>) . toVarName . fst) args, tt))
+        pure $ TAlias (Atom Nothing erlName) tyargs
+
+      tname
+        | Just (_, t) <- M.lookup tname (E.types env)
+        --  DataType [(Text, Maybe SourceKind)] [(ProperName 'ConstructorName, [SourceType])]
+        , DataType _dt dtargs (ctors :: [(ProperName 'P.ConstructorName, [SourceType])]) <- t
+        , length dtargs == length tyargs
+        -- can't ignore mn for external stuff
+        , (Qualified mn' ident) <- tname
+        -> do
+          let erlName = erlTypeName tname
+          M.lookup erlName <$> get >>= \case
+            Just _ -> pure ()
+            Nothing -> do
+              -- dummy to prevent recursing
+              modify (M.insert erlName (map (("_" <>) . toVarName . (\(x,_,_) -> x)) dtargs, TAny))
+              let alt (ctorName, ctorArgs) = do
+                                    targs <- traverse go ctorArgs
+                                    pure $ case isNewtypeConstructor env (Qualified mn' ctorName) of
+                                        Just True -> head targs
+                                        Just False -> TTuple (TAtom (Just $ Atom Nothing $ toAtomName $ P.runProperName ctorName): targs)
+                                        Nothing -> 
+                                          -- TODO if we put this in the defining module maybe an opaque type would be useful to prevent some misuse
+                                          TAny
+              tt <- traverse alt ctors
+              let union = case length tt of 
+                            0 -> TAny -- arguably none()
+                            _ -> TUnion tt
+              modify (M.insert erlName (map (("_" <>)  .toVarName . (\(x,_,_) -> x)) dtargs, union))
+
+          pure $ TAlias (Atom Nothing erlName) tyargs
+      -- not a data type/alias we can find or not fully applied
+      tname -> pure TAny
+
+  lookupConstructor :: Environment -> Qualified (P.ProperName 'P.ConstructorName) -> Maybe (P.DataDeclType, ProperName 'P.TypeName, P.SourceType, [Ident])
+  lookupConstructor env ctor =
+    ctor `M.lookup` P.dataConstructors env
+
+  -- | Checks whether a data constructor is for a newtype.
+  isNewtypeConstructor :: Environment -> Qualified (P.ProperName 'P.ConstructorName) -> Maybe Bool
+  isNewtypeConstructor e ctor = case lookupConstructor e ctor of
+    Just (P.Newtype, _, _, _) -> Just True
+    Just (P.Data, _, _, _) -> Just False
+    Nothing -> Nothing
 
   ctorTy :: ModuleName -> T.Text -> SourceType
-  ctorTy modName fn = (TypeConstructor nullSourceAnn (Qualified (Just modName) (ProperName fn)))
+  ctorTy modName fn = TypeConstructor nullSourceAnn (Qualified (Just modName) (ProperName fn))
 
   uncurryType :: Int -> EType -> Maybe EType
   uncurryType arity = uc []
-    where 
+    where
       uc [] uncurriedType@(TFun ts _) | length ts > 1 = Just uncurriedType
       uc ts (TFun [ t1 ] t2) = uc (t1:ts) t2
       uc ts t | length ts == arity = Just $ TFun (reverse ts) t
       uc _ _ = Nothing
-      
+
 
 
   findApps :: Bind Ann -> M.Map (Qualified Ident) Int -> M.Map (Qualified Ident) Int
@@ -353,7 +529,7 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
 
   findAppsCase (CaseAlternative _ (Right e)) apps = findApps' e apps
   findAppsCase (CaseAlternative _ (Left ges)) apps = foldr findApps' apps $ map snd ges
-  
+
 
   bindToErl :: Bind Ann -> m [Erl]
   bindToErl (NonRec _ ident val) =
@@ -403,14 +579,14 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
     case M.lookup ident arities of
       Just 1 -> EFunRef (qualifiedToErl ident) 1
       _ | Just arity <- effFnArity ident <|> fnArity ident
-        , arity > 0 -> EFunRef (qualifiedToErl ident) arity 
+        , arity > 0 -> EFunRef (qualifiedToErl ident) arity
       _ -> EApp (EAtomLiteral $ qualifiedToErl ident) []
 
   valueToErl' _ (Var _ ident) = return $ EVar $ qualifiedToVar ident
 
   valueToErl' ident (Abs _ arg val) = do
     ret <- valueToErl val
-    
+
     -- TODO this is mangled in corefn json
     let fixIdent (Ident "$__unused") = UnusedIdent
         fixIdent x = x
@@ -432,7 +608,8 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
     let (f, args) = unApp e []
     args' <- mapM valueToErl args
     case f of
-      Var (_, _, _, Just IsNewtype) _ -> return (head args')
+      Var (_, _, st, Just IsNewtype) _ -> 
+        return $ head args'
       Var (_, _, _, Just (IsConstructor _ fields)) (Qualified _ ident) | length args == length fields ->
         return $ constructorLiteral (runIdent ident) args'
       Var (_, _, _, Just IsTypeClassConstructor) name ->
@@ -567,3 +744,4 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
     where isVar (EVar _) = True
           isVar _ = False
   irrefutable _ = False
+
