@@ -5,13 +5,6 @@
 
 packages:
 - completed:
-    hackage: happy-1.19.9@sha256:f8c774230735a390c287b2980cfcd2703d24d8dde85a01ea721b7b4b4c82944f,4667
-    pantry-tree:
-      size: 7980
-      sha256: 1f1d622f6e773e7a674da6364b755714c76c3fbb3c7a4e65deaf07242fc15211
-  original:
-    hackage: happy-1.19.9
-- completed:
     hackage: language-javascript-0.7.0.0@sha256:3eab0262b8ac5621936a4beab6a0f97d0e00a63455a8b0e3ac1547b4088dae7d,3898
     pantry-tree:
       size: 2244
@@ -19,36 +12,47 @@ packages:
   original:
     hackage: language-javascript-0.7.0.0
 - completed:
-    hackage: network-3.0.1.1@sha256:1a251b790ea98b6f7433f677958f921950780ba6f143d61ba8c0e3f7a9879097,4074
+    size: 703689
+    subdir: lib/purescript-ast
+    url: https://github.com/purescript/purescript/archive/v0.14.1.tar.gz
+    name: purescript-ast
+    version: 0.1.1.0
+    sha256: d44f797124ce07f4e7102a6129e851e89a4529adbc804c48c758bed9881a8d32
     pantry-tree:
-      size: 3296
-      sha256: 78e378780c998faaf4e32a16b98880220f502d8ef005f24d7ee0c99fb50636e6
+      size: 1827
+      sha256: 0159dc736c923a69f302ae537e873ab75c2d56772c81329d78e93195be3c9ecb
   original:
-    hackage: network-3.0.1.1
+    subdir: lib/purescript-ast
+    url: https://github.com/purescript/purescript/archive/v0.14.1.tar.gz
 - completed:
-    hackage: these-1.0.1@sha256:7ff0f309978604015d978fb155ac4dc10a98e3d70a99aa2be8f755eb0cca4324,3191
+    size: 703689
+    subdir: lib/purescript-cst
+    url: https://github.com/purescript/purescript/archive/v0.14.1.tar.gz
+    name: purescript-cst
+    version: 0.1.1.0
+    sha256: d44f797124ce07f4e7102a6129e851e89a4529adbc804c48c758bed9881a8d32
     pantry-tree:
-      size: 351
-      sha256: 3257ef64424e9a07e2ae750eff7affcd459811c4669cb67a5e4f43ab833c5aba
+      size: 3197
+      sha256: 253755ed731909a3cb3785f5146c535f2babf66d5cdfa72f2e281df9203b9904
   original:
-    hackage: these-1.0.1
+    subdir: lib/purescript-cst
+    url: https://github.com/purescript/purescript/archive/v0.14.1.tar.gz
 - completed:
-    hackage: semialign-1@sha256:f11b3d8d0f31a3556061ec0fb515575646d162f12c5b25a0f07c92679db7d862,2433
+    size: 703689
+    subdir: .
+    url: https://github.com/purescript/purescript/archive/v0.14.1.tar.gz
+    name: purescript
+    version: 0.14.1
+    sha256: d44f797124ce07f4e7102a6129e851e89a4529adbc804c48c758bed9881a8d32
     pantry-tree:
-      size: 466
-      sha256: e67b833b94b7fa23afbf7088833a38596cf35a2b93635604dd9e49d0389360fe
+      size: 124048
+      sha256: 02ff29ab4d66af2d715043a0c1f3a874f6fdc823ad64dc0aa96e49f1fb2ddd26
   original:
-    hackage: semialign-1
-- completed:
-    hackage: serialise-0.2.2.0@sha256:6e8b89f437009ab30297a57de1a4bf2e3da5e5a086b96bf5cc278bdb7178f097,8356
-    pantry-tree:
-      size: 4056
-      sha256: 97702981cdfe830fca6d258341b9773272400e475165689548f56da83eff2778
-  original:
-    hackage: serialise-0.2.2.0
+    subdir: .
+    url: https://github.com/purescript/purescript/archive/v0.14.1.tar.gz
 snapshots:
 - completed:
-    size: 499889
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/13/26.yaml
-    sha256: ecb02ee16829df8d7219e7d7fe6c310819820bf335b0b9534bce84d3ea896684
-  original: lts-13.26
+    size: 565712
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/17/6.yaml
+    sha256: 4e5e581a709c88e3fe26a9ce8bf331435729bead762fb5c190064c6c5bb1b835
+  original: lts-17.6
