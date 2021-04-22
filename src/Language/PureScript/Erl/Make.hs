@@ -22,7 +22,7 @@ import           Language.PureScript.Erl.Parser (parseFile)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import           System.FilePath ((</>))
-import           Data.Foldable (for_, minimum)
+import           Data.Foldable (for_)
 import           System.Directory (getCurrentDirectory)
 import           Data.Version (showVersion)
 import           Data.Time.Clock (UTCTime)

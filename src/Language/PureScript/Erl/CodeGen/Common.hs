@@ -23,7 +23,6 @@ import Data.Char
 import Data.Text (Text, uncons, cons, singleton, all, pack, singleton)
 import qualified Data.Text as T
 import Data.Word (Word16)
-import Data.Monoid ((<>))
 import Language.PureScript.Names
 import Language.PureScript.PSString
 import Numeric

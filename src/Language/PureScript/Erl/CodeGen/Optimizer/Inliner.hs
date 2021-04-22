@@ -16,7 +16,6 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.String (IsString)
 import Language.PureScript.PSString (PSString, mkString)
-import Data.Monoid ((<>))
 import Data.Maybe (mapMaybe)
 import qualified Data.Set as Set
 

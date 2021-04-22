@@ -23,7 +23,7 @@ import qualified Data.Map as M
 import           Data.Ord (comparing)
 import qualified Data.Text as T
 import           Data.Text (Text)
-import           Language.PureScript.AST (SourceSpan, ErrorMessageHint(..), HintCategory(..), DeclarationRef(..), ImportDeclarationType(..), Expr(..))
+import           Language.PureScript.AST (ErrorMessageHint(..), HintCategory(..), DeclarationRef(..), ImportDeclarationType(..), Expr(..))
 import           Language.PureScript.AST.SourcePos
 import qualified Language.PureScript.Constants.Prim as C
 import           Language.PureScript.Crash
