@@ -1,18 +1,23 @@
-resolver: lts-13.26
+resolver: lts-17.6
 pvp-bounds: upper
 packages:
 - .
 extra-deps:
-- happy-1.19.9
 - language-javascript-0.7.0.0
-- network-3.0.1.1
-- these-1.0.1
-- semialign-1
-- purescript-0.13.8
-- serialise-0.2.2.0
+- github: purescript/purescript
+  commit: v0.14.1
+  subdirs:
+    - lib/purescript-ast
+    - lib/purescript-cst
+    - '.'
 flags:
   aeson-pretty:
     lib-only: true
   these:
     assoc: false
-    quickcheck: false
+  haskeline:
+    # Avoids a libtinfo dynamic library dependency
+    terminfo: false
+  # Building on certain CentOS (maybe ghc) versions
+  cryptonite:
+    use_target_attributes: false

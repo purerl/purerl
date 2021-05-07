@@ -12,7 +12,8 @@ import           Prelude ()
 import           Prelude.Compat
 import           Control.Applicative (many)
 import           Control.Monad
-import           Control.Monad.IO.Class (liftIO)
+import           Control.Monad.Catch (MonadMask)
+import           Control.Monad.IO.Class (liftIO, MonadIO)
 import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.Except (ExceptT(..), runExceptT)
 import           Control.Monad.Trans.State.Strict (StateT, evalStateT)
@@ -48,7 +49,7 @@ psciOptions :: Opts.Parser PSCiOptions
 psciOptions = PSCiOptions <$> many inputFile
 
 -- | Parses the input and returns either a command, or an error as a 'String'.
-getCommand :: forall m. MonadException m => InputT m (Either String [Command])
+getCommand :: forall m. (MonadIO m, MonadMask m) => InputT m (Either String [Command])
 getCommand = handleInterrupt (return (Right [])) $ do
   line <- withInterrupt $ getInputLine "> "
   case line of
@@ -56,7 +57,7 @@ getCommand = handleInterrupt (return (Right [])) $ do
     Just "" -> return (Right [])
     Just s  -> return (parseCommand s)
 
-pasteMode :: forall m. MonadException m => InputT m (Either String [Command])
+pasteMode :: forall m. (MonadIO m, MonadMask m) => InputT m (Either String [Command])
 pasteMode =
     parseCommand <$> go []
   where

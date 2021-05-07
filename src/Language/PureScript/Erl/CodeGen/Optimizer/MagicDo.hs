@@ -10,7 +10,7 @@ import Data.Text (Text)
 
 import Language.PureScript.Erl.CodeGen.AST
 import Language.PureScript.Erl.CodeGen.Optimizer.Common
-import qualified Language.PureScript.Constants as C
+import qualified Language.PureScript.Constants.Prelude as C
 import qualified Language.PureScript.Erl.CodeGen.Constants as EC
 
 magicDo :: Erl -> Erl

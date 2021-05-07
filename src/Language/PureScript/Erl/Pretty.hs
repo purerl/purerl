@@ -68,7 +68,7 @@ literals = mkPattern' match
         ]
       _ -> [])
     <>
-    printFunTy t
+    [ return $ printFunTy (Just $ length xs) x t, return $ emit ".\n" ]
     <>
     [ return $ emit $ runAtom x <> "(" <> intercalate "," xs <> ") -> " ]
     <> case e of
@@ -79,31 +79,7 @@ literals = mkPattern' match
           ]
         _ -> [prettyPrintErl' e]
     )
-    where
-      printFunTy (Just (TFun ts ty)) =
-        [ return $ emit $ "-spec " <> runAtom x <> "(" <> (T.intercalate "," $ printTy <$> ts) <> ") -> " <> printTy ty <> ".\n" ]
-      printFunTy _ = []
-
-      printTy TAny = "any()"
-      printTy TNone = "none()"
-      printTy TPid = "pid()"
-      printTy TPort = "port()"
-      printTy TReference = "reference()"
-      printTy TNil = "[]"
-      printTy TInteger = "integer()"
-      
-      printTy (TFun ts tf) = "fun((" <> (T.intercalate "," $ printTy <$> ts) <> ") -> " <> printTy tf <> ")"
-      printTy TFloat = "float()"
-      printTy (TAlias alias) = alias <> "()"
-      printTy (TAtom Nothing) = "atom()"
-      printTy (TAtom (Just a)) = a
-      printTy (TList ts) = "list(" <> printTy ts <> ")"
-      printTy (TMap Nothing) = "map()"
-      printTy (TMap (Just ts)) = "#{"<> (T.intercalate "," $ (\(t1, t2) -> printTy t1 <> " => " <> printTy t2) <$> ts ) <> "}"
-      printTy (TRemote tymod tyname  tys) = tymod <> ":" <> tyname <> "(" <> T.intercalate "," (printTy <$> tys) <> ")"
-
-      printTy _ = "any()"
-
+    
   match (EVar x) = return $ emit x
 
   match (EMapLiteral elts) = do
@@ -213,7 +189,46 @@ literals = mkPattern' match
       -- TODO: Check valid atom, cconvert etc
     _ -> internalError "Did not expect non UTF8 safe attribute text"
 
+  match (ESpec name ty) =
+    return $ printFunTy Nothing name (Just ty)
+  match (EType name args ty) =
+    return $ printTypeDef name args (Just ty)
+
   match _ = mzero
+
+  printFunTy _ name (Just (TFun ts ty)) =
+    emit $ "-spec " <> runAtom name <> "(" <> (T.intercalate "," $ printTy <$> ts) <> ") -> " <> printTy ty
+  printFunTy (Just numArgs) name Nothing =
+    emit $ "-spec " <> runAtom name <> "(" <> (T.intercalate "," $ replicate numArgs "any()") <> ") -> any()"
+  printFunTy _ _ _ = internalError "Can't print spec for function with unknown arg length"
+
+  printTypeDef name args (Just ty) =
+    emit $ "-type " <> runAtom name <> "(" <> (T.intercalate "," args)  <>  ") :: " <> printTy ty
+  printTypeDef _ _ _ = internalError "Empty typedef"
+
+
+  printTy TAny = "any()"
+  printTy TNone = "none()"
+  printTy TPid = "pid()"
+  printTy TPort = "port()"
+  printTy TReference = "reference()"
+  printTy TNil = "[]"
+  printTy TInteger = "integer()"
+  printTy (TVar var) = var
+  
+  printTy (TFun ts tf) = "fun((" <> (T.intercalate "," $ printTy <$> ts) <> ") -> " <> printTy tf <> ")"
+  -- printTy TFunAny
+  printTy TFloat = "float()"
+  printTy (TAlias alias ts) = runAtom alias <> "(" <>  (T.intercalate "," $ printTy <$> ts) <> ")"
+  printTy (TAtom Nothing) = "atom()"
+  printTy (TAtom (Just a)) = runAtom a
+  printTy (TList ts) = "list(" <> printTy ts <> ")"
+  printTy (TMap Nothing) = "map()"
+  printTy (TMap (Just ts)) = "#{"<> (T.intercalate "," $ (\(t1, t2) -> printTy t1 <> " => " <> printTy t2) <$> ts ) <> "}"
+  printTy (TTuple ts) = "{" <>  T.intercalate "," (printTy <$> ts) <> "}"
+  printTy (TUnion ts) = T.intercalate " | " $ printTy <$> ts
+  
+  printTy (TRemote tymod tyname  tys) = tymod <> ":" <> tyname <> "(" <> T.intercalate "," (printTy <$> tys) <> ")"
 
 
 fromChar :: Char -> Word16

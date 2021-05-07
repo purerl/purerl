@@ -31,7 +31,7 @@ import           Control.Monad.Writer.Strict (Writer(), runWriter)
 import qualified Language.PureScript as P
 import qualified Language.PureScript.CST as CST
 import qualified Language.PureScript.Names as N
-import qualified Language.PureScript.Constants as C
+import qualified Language.PureScript.Constants.Prim as C
 
 import           Language.PureScript.Interactive.Completion   as Interactive
 import           Language.PureScript.Interactive.IO           as Interactive
@@ -226,10 +226,9 @@ handleShowImportedModules print' = do
     Just $ N.runIdent ident
   showRef (P.ModuleRef _ name) =
     Just $ "module " <> N.runModuleName name
-  showRef (P.KindRef _ pn) =
-    Just $ "kind " <> N.runProperName pn
   showRef (P.ReExportRef _ _ _) =
     Nothing
+
 
   commaList :: [Text] -> Text
   commaList = T.intercalate ", "
@@ -299,13 +298,13 @@ handleKindOf print' typ = do
       case M.lookup (P.Qualified (Just mName) $ P.ProperName "IT") (P.typeSynonyms env') of
         Just (_, typ') -> do
           let chk = (P.emptyCheckState env') { P.checkCurrentModule = Just mName }
-              k   = check (P.kindOf typ') chk
+              k   = check (snd <$> P.kindOf typ') chk
 
               check :: StateT P.CheckState (ExceptT P.MultipleErrors (Writer P.MultipleErrors)) a -> P.CheckState -> Either P.MultipleErrors (a, P.CheckState)
               check sew = fst . runWriter . runExceptT . runStateT sew
           case k of
             Left err        -> printErrors err
-            Right (kind, _) -> print' . T.unpack . P.prettyPrintKind $ kind
+            Right (kind, _) -> print' . P.prettyPrintType 1024 $ kind
         Nothing -> print' "Could not find kind"
 
 -- | Browse a module and displays its signature

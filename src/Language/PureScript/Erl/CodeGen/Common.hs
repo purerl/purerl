@@ -7,6 +7,7 @@ module Language.PureScript.Erl.CodeGen.Common
 , atom
 , atomModuleName
 , erlModuleName
+, erlModuleNameBase
 , ModuleType(..)
 , toAtomName
 , toVarName
@@ -22,7 +23,6 @@ import Data.Char
 import Data.Text (Text, uncons, cons, singleton, all, pack, singleton)
 import qualified Data.Text as T
 import Data.Word (Word16)
-import Data.Monoid ((<>))
 import Language.PureScript.Names
 import Language.PureScript.PSString
 import Numeric
@@ -106,11 +106,15 @@ atomModuleName :: ModuleName -> ModuleType -> Text
 atomModuleName = erlModuleName
 
 erlModuleName :: ModuleName -> ModuleType -> Text
-erlModuleName (ModuleName name) moduleType =
-  T.intercalate "_" (toAtomName <$> T.splitOn "." name) <>
-    case moduleType of
-      ForeignModule -> "@foreign"
-      PureScriptModule -> "@ps"
+erlModuleName mn moduleType = erlModuleNameBase mn <>
+  case moduleType of
+    ForeignModule -> "@foreign"
+    PureScriptModule -> "@ps"
+
+erlModuleNameBase :: ModuleName ->  Text
+erlModuleNameBase (ModuleName name) =
+  T.intercalate "_" (toAtomName <$> T.splitOn "." name) 
+
 
 toAtomName :: Text -> Text
 toAtomName text = case uncons text of

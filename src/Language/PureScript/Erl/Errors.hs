@@ -23,14 +23,15 @@ import qualified Data.Map as M
 import           Data.Ord (comparing)
 import qualified Data.Text as T
 import           Data.Text (Text)
-import           Language.PureScript.AST (SourceSpan, ErrorMessageHint(..), HintCategory(..), DeclarationRef(..), ImportDeclarationType(..), Expr(..))
+import           Language.PureScript.AST (ErrorMessageHint(..), HintCategory(..), DeclarationRef(..), ImportDeclarationType(..), Expr(..))
 import           Language.PureScript.AST.SourcePos
-import qualified Language.PureScript.Constants as C
+import qualified Language.PureScript.Constants.Prim as C
 import           Language.PureScript.Crash
 import           Language.PureScript.Environment
 import           Language.PureScript.Label (Label(..))
 import           Language.PureScript.Names
 import           Language.PureScript.Pretty
+import           Language.PureScript.Errors (prettyPrintRef)
 import           Language.PureScript.Pretty.Common (endWith)
 import           Language.PureScript.PSString (decodeStringWithReplacement)
 import           Language.PureScript.Types
@@ -77,6 +78,7 @@ errorCode em = case unwrapErrorMessage em of
   UnusedFFIImplementations{} -> "UnusedFFIImplementations"
   InvalidFFIArity{} -> "InvalidFFIArity"
   FileIOError{} -> "FileIOError"
+  InternalError{} -> "InternalError"
 
 
 -- | A stack trace for an error
@@ -145,27 +147,6 @@ data Level = Error | Warning deriving Show
 -- | Extract nested error messages from wrapper errors
 unwrapErrorMessage :: ErrorMessage -> SimpleErrorMessage
 unwrapErrorMessage (ErrorMessage _ se) = se
-
-replaceUnknowns :: SourceType -> State TypeMap SourceType
-replaceUnknowns = everywhereOnTypesM replaceTypes where
-  replaceTypes :: SourceType -> State TypeMap SourceType
-  replaceTypes (TUnknown ann u) = do
-    m <- get
-    case M.lookup u (umUnknownMap m) of
-      Nothing -> do
-        let u' = umNextIndex m
-        put $ m { umUnknownMap = M.insert u u' (umUnknownMap m), umNextIndex = u' + 1 }
-        return (TUnknown ann u')
-      Just u' -> return (TUnknown ann u')
-  replaceTypes (Skolem ann name s sko) = do
-    m <- get
-    case M.lookup s (umSkolemMap m) of
-      Nothing -> do
-        let s' = umNextIndex m
-        put $ m { umSkolemMap = M.insert s (T.unpack name, s', Just (fst ann)) (umSkolemMap m), umNextIndex = s' + 1 }
-        return (Skolem ann name s' sko)
-      Just (_, s', _) -> return (Skolem ann name s' sko)
-  replaceTypes other = return other
 
 errorDocUri :: ErrorMessage -> Text
 errorDocUri e = "https://github.com/purescript/documentation/blob/master/errors/" <> errorCode e <> ".md"
@@ -275,6 +256,10 @@ prettyPrintSingleError (PPEOptions codeColor full _level _showDocs relPath) e = 
             , indent . lineS $ displayException err
             ]
 
+    renderSimpleErrorMessage (InternalError text) =
+      paras [ line $ "Internal error: " <> text
+            ]
+
     renderSimpleErrorMessage (MissingFFIModule mn) =
       line $ "The foreign module implementation for module " <> markCode (runModuleName mn) <> " is missing."            
 
@@ -341,9 +326,18 @@ prettyPrintSingleError (PPEOptions codeColor full _level _showDocs relPath) e = 
                , Box.vcat Box.left (map (typeAtomAsBox prettyDepth) ts)
                ]
             ]
-    renderHint (ErrorCheckingKind ty) detail =
+    renderHint (ErrorCheckingKind ty kd) detail =
       paras [ detail
-            , Box.hsep 1 Box.top [ line "while checking the kind of"
+            , Box.hsep 1 Box.top [ line "while checking that type"
+                                 , markCodeBox $ typeAsBox prettyDepth ty
+                                 ]
+            , Box.moveRight 2 $ Box.hsep 1 Box.top [ line "has kind"
+                                                   , markCodeBox $ typeAsBox prettyDepth kd
+                                                   ]
+            ]
+    renderHint (ErrorInferringKind ty) detail =
+      paras [ detail
+            , Box.hsep 1 Box.top [ line "while inferring the kind of"
                                  , markCodeBox $ typeAsBox prettyDepth ty
                                  ]
             ]
@@ -416,11 +410,19 @@ prettyPrintSingleError (PPEOptions codeColor full _level _showDocs relPath) e = 
       paras [ detail
             , line $ "in type class declaration for " <> markCode (runProperName name)
             ]
+    renderHint (ErrorInKindDeclaration name) detail =
+      paras [ detail
+            , line $ "in kind declaration for " <> markCode (runProperName name)
+            ]
+    renderHint (ErrorInRoleDeclaration name) detail =
+      paras [ detail
+            , line $ "in role declaration for " <> markCode (runProperName name)
+            ]
     renderHint (ErrorInForeignImport nm) detail =
       paras [ detail
             , line $ "in foreign import " <> markCode (showIdent nm)
             ]
-    renderHint (ErrorSolvingConstraint (Constraint _ nm ts _)) detail =
+    renderHint (ErrorSolvingConstraint (Constraint _ nm _ ts _)) detail =
       paras [ detail
             , line "while solving type class constraint"
             , markCodeBox $ indent $ Box.hsep 1 Box.left
@@ -428,6 +430,11 @@ prettyPrintSingleError (PPEOptions codeColor full _level _showDocs relPath) e = 
                 , Box.vcat Box.left (map (typeAtomAsBox prettyDepth) ts)
                 ]
             ]
+    renderHint (MissingConstructorImportForCoercible name) detail =
+      paras
+        [ detail
+        , Box.moveUp 1 $ Box.moveRight 2 $ line $ "Solving this instance requires the newtype constructor " <> markCode (showQualified runProperName name) <> " to be in scope."
+        ]            
     renderHint (PositionedError srcSpan) detail =
       paras [ line $ "at " <> displaySourceSpan relPath (NEL.head srcSpan)
             , detail
@@ -515,29 +522,6 @@ prettyPrintImport mn idt qual =
             Hiding refs -> runModuleName mn <> " hiding (" <> T.intercalate "," (mapMaybe prettyPrintRef refs) <> ")"
   in i <> maybe "" (\q -> " as " <> runModuleName q) qual
 
-prettyPrintRef :: DeclarationRef -> Maybe Text
-prettyPrintRef (TypeRef _ pn Nothing) =
-  Just $ runProperName pn <> "(..)"
-prettyPrintRef (TypeRef _ pn (Just [])) =
-  Just $ runProperName pn
-prettyPrintRef (TypeRef _ pn (Just dctors)) =
-  Just $ runProperName pn <> "(" <> T.intercalate ", " (map runProperName dctors) <> ")"
-prettyPrintRef (TypeOpRef _ op) =
-  Just $ "type " <> showOp op
-prettyPrintRef (ValueRef _ ident) =
-  Just $ showIdent ident
-prettyPrintRef (ValueOpRef _ op) =
-  Just $ showOp op
-prettyPrintRef (TypeClassRef _ pn) =
-  Just $ "class " <> runProperName pn
-prettyPrintRef (TypeInstanceRef _ ident) =
-  Just $ showIdent ident
-prettyPrintRef (ModuleRef _ name) =
-  Just $ "module " <> runModuleName name
-prettyPrintRef (KindRef _ pn) =
-  Just $ "kind " <> runProperName pn
-prettyPrintRef ReExportRef{} =
-  Nothing
 
 -- | Pretty print multiple errors
 prettyPrintMultipleErrors :: PPEOptions -> MultipleErrors -> String

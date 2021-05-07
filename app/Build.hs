@@ -28,7 +28,7 @@ import           System.IO.Error (isDoesNotExistError)
 import qualified Data.ByteString.Lazy.UTF8 as LBU8
 import Control.Monad.IO.Class
 import           Data.Aeson as Aeson
-import           Data.Aeson.Types (Value, parseMaybe)
+import           Data.Aeson.Types (parseMaybe)
 import qualified Data.Text as T
 import           System.FilePath (replaceFileName, replaceExtension, joinPath)
 import qualified System.FilePath as FP

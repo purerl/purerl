@@ -6,7 +6,6 @@ import Prelude
 
 import           System.Environment (getArgs)
 import qualified System.IO as IO
-import           System.IO (IO)
 import qualified Options.Applicative as Opts
 import qualified Text.PrettyPrint.ANSI.Leijen as Doc
 import qualified Build

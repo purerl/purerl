@@ -2,9 +2,13 @@
 
 # Overview
 
-A small strongly typed programming language with expressive types, written in and inspired by Haskell.
+PureScript is a small strongly typed programming language with expressive types, written in and inspired by Haskell; purerl is a PureScript backend targetting Erlang source. 
 
-The original PureScript project compiles to JavaScript, but this fork is a backend targetting Erlang source. The [purerl](https://github.com/purerl) organisation hosts ports of some core libraries.
+# Resources
+
+- [FP slack](https://fpchat-invite.herokuapp.com/) channel `#purerl` - general discussion, support, news
+- [purerl Pursuit](https://pursuit.purerl.fun/) - a version of the PureScript pursuit documentation repository for purerl package sets
+- The [purerl](https://github.com/purerl) organisation hosts ports of some core libraries.
 
 # Versions
 
@@ -12,6 +16,8 @@ Currently the `purerl` executable should correspond to `purs` compiler versions 
 
 | `purerl` version | `purs` version |
 | --- |  --- |
+| 0.0.9 | 0.14.1 |
+| 0.0.8 | 0.14.0 |
 | 0.0.7 | 0.13.8 |
 | 0.0.6 | 0.13.6 |
 
@@ -48,6 +54,14 @@ Then run `purerl` to generate `.erl` files
 * `purerl`
 
 (No parameters are required, `purerl` will build whatever is in `output/`).
+
+## IDE support
+
+The standard PureScript IDE tooling based on `purs ide` and editor plugins and/or [PureScript Language Server](https://github.com/nwolverson/purescript-language-server) should work with purerl projects, but should be configured to generate `corefn` rather than `js`, eg with vscode:
+
+```json
+"purescript.codegenTargets": [ "corefn" ]
+```
 
 # purerl erlang representation and FFI usage
 
