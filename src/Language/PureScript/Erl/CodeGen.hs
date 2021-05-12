@@ -91,18 +91,6 @@ isTopLevelBinding :: Qualified t -> Bool
 isTopLevelBinding (Qualified (Just _) _) = True
 isTopLevelBinding (Qualified Nothing _) = False
 
-tyArity :: SourceType -> FnArity
-tyArity t = Arity $ go 0 t
-  where
-  go n = \case
-    ConstrainedType _ _ ty -> go (n+1) ty
-    ForAll _ _ _ ty _ -> go n ty
-    other -> (n, go' other)
-  go' = \case
-    TypeApp _ (TypeApp _ fn _) ty | fn == E.tyFunction -> 1 + go' ty
-    ForAll _ _ _ ty _ -> go' ty
-    _ -> 0
-
 collectTypeApp :: SourceType -> Maybe (Qualified (ProperName 'P.TypeName), [SourceType])
 collectTypeApp = go []
   where
@@ -207,6 +195,20 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
 
   concatRes :: [([a], [b], ETypeEnv)] -> ([a], [b], ETypeEnv)
   concatRes x = (concatMap (\(a,_,_) -> a) x, concatMap (\(_, b, _) -> b) x, M.unions $ (\(_,_,c) -> c) <$> x)
+
+  tyArity :: SourceType -> FnArity
+  tyArity t = Arity $ go 0 t'
+    where
+    t' = either (const t) id $ replaceAllTypeSynonyms' (E.typeSynonyms env) (E.types env) t
+
+    go n = \case
+      ConstrainedType _ _ ty -> go (n+1) ty
+      ForAll _ _ _ ty _ -> go n ty
+      other -> (n, go' other)
+    go' = \case
+      TypeApp _ (TypeApp _ fn _) ty | fn == E.tyFunction -> 1 + go' ty
+      ForAll _ _ _ ty _ -> go' ty
+      _ -> 0
 
   explicitArities :: M.Map (Qualified Ident) FnArity
   explicitArities = tyArity <$> types
