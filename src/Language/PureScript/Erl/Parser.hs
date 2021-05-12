@@ -8,26 +8,27 @@ import qualified Text.Parsec as P
 import Text.Parsec ( (<|>) )
 import qualified Text.Parsec.Char as PC
 
-parseFile :: P.SourceName -> Text -> Either P.ParseError [(Text, Int)]
+parseFile :: P.SourceName -> Text -> Either P.ParseError  ( [(Text, Int)], [(Text, Int)] )
 parseFile = P.parse parseLines
 
-parseLines :: P.Parsec Text u [(Text, Int)]
+parseLines :: P.Parsec Text u  ( [(Text, Int)], [(Text, Int)] )
 parseLines = do
   l <- parseLine
   lns <- P.many $ do
     _ <- P.endOfLine
     parseLine
   P.eof
-  pure (concat $ l : lns)
+  pure (mconcat $ l : lns)
 
-parseLine :: P.Parsec Text u [(Text, Int)]
-parseLine = P.try parseAttribute <|>
+parseLine :: P.Parsec Text u ( [(Text, Int)], [(Text, Int)] )
+parseLine = ((,[]) <$> P.try (parseAttribute "export")) <|>
+            (([],) <$> P.try (parseAttribute "purs_ignore_exports")) <|>
   do
     P.skipMany (PC.noneOf ['\n', '\r'])
-    pure []
+    pure ([],[])
 
-parseAttribute :: P.Parsec Text u [(Text, Int)]
-parseAttribute = attributeParser "export"
+parseAttribute :: String -> P.Parsec Text u [(Text, Int)]
+parseAttribute text = attributeParser text
   (P.between (PC.char '[') (PC.char ']') (atomArityParser `P.sepBy` PC.char ','))
 
 -- P.Parsec String u Token

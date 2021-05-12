@@ -17,6 +17,7 @@ import Language.PureScript.Erl.Make.Monad
 import qualified Language.PureScript as P
 import Control.Monad.Supply ( SupplyT )
 import qualified Data.Map as M
+import           Data.List ((\\))
 import qualified Data.List.NonEmpty as NEL
 import           Language.PureScript.Erl.Parser (parseFile)
 import qualified Data.Text as T
@@ -134,4 +135,5 @@ buildActions outputDir env foreigns usePrefix =
   getForeigns :: String -> Make [(T.Text, Int)]
   getForeigns path = do
     text <- readTextFile path
-    pure $ fromRight [] $ parseFile path text
+    let (exports, ignoreExports) = fromRight ([],[]) $ parseFile path text
+    pure $ exports \\ ignoreExports
