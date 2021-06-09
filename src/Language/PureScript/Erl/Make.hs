@@ -94,9 +94,10 @@ buildActions outputDir env foreigns usePrefix =
           "-compile(nowarn_unused_function).",
           "-compile(no_auto_import).",
           includeHrl,
-          "-ifndef(MEMOIZE).",
+          "-ifndef(PURERL_MEMOIZE).",
           "-define(MEMOIZE(X), X).",
           "-else.",
+          "-define(MEMOIZE, memoize).",
           "memoize(X) -> X.",
           "-endif."
           ]
