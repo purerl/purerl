@@ -36,7 +36,7 @@ import qualified Data.Text as Text
 import           Data.Time.Clock (UTCTime)
 import           Language.PureScript.Erl.Errors
 import           Language.PureScript.Erl.Errors.Types
-import           Language.PureScript.Externs (ExternsFile, externsIsCurrentVersion)
+import           Language.PureScript.Externs (ExternsFile)
 import           Language.PureScript.Options
 import           System.Directory (createDirectoryIfMissing, getModificationTime)
 import qualified System.Directory as Directory
@@ -127,7 +127,6 @@ readExternsFile path = do
   mexterns <- readCborFile path
   return $ do
     externs <- mexterns
-    guard $ externsIsCurrentVersion externs
     return externs
 
 -- | If the provided action threw an 'isDoesNotExist' error, catch it and

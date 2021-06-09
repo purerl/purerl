@@ -12,44 +12,31 @@ packages:
   original:
     hackage: language-javascript-0.7.0.0
 - completed:
-    size: 703689
-    subdir: lib/purescript-ast
-    url: https://github.com/purescript/purescript/archive/v0.14.1.tar.gz
-    name: purescript-ast
-    version: 0.1.1.0
-    sha256: d44f797124ce07f4e7102a6129e851e89a4529adbc804c48c758bed9881a8d32
-    pantry-tree:
-      size: 1827
-      sha256: 0159dc736c923a69f302ae537e873ab75c2d56772c81329d78e93195be3c9ecb
-  original:
-    subdir: lib/purescript-ast
-    url: https://github.com/purescript/purescript/archive/v0.14.1.tar.gz
-- completed:
-    size: 703689
+    size: 702460
     subdir: lib/purescript-cst
-    url: https://github.com/purescript/purescript/archive/v0.14.1.tar.gz
+    url: https://github.com/purescript/purescript/archive/v0.14.2.tar.gz
     name: purescript-cst
-    version: 0.1.1.0
-    sha256: d44f797124ce07f4e7102a6129e851e89a4529adbc804c48c758bed9881a8d32
+    version: 0.2.0.0
+    sha256: c448f557e697a469bb67db6c21ea0315c59818aa3c1fea0a3b06b002ec555486
     pantry-tree:
-      size: 3197
-      sha256: 253755ed731909a3cb3785f5146c535f2babf66d5cdfa72f2e281df9203b9904
+      size: 3018
+      sha256: f3c6de8cc1e8e29d0aae23ed96eab5778e75ff1692a18c5dc62d1c881f6e2056
   original:
     subdir: lib/purescript-cst
-    url: https://github.com/purescript/purescript/archive/v0.14.1.tar.gz
+    url: https://github.com/purescript/purescript/archive/v0.14.2.tar.gz
 - completed:
-    size: 703689
+    size: 702460
     subdir: .
-    url: https://github.com/purescript/purescript/archive/v0.14.1.tar.gz
+    url: https://github.com/purescript/purescript/archive/v0.14.2.tar.gz
     name: purescript
-    version: 0.14.1
-    sha256: d44f797124ce07f4e7102a6129e851e89a4529adbc804c48c758bed9881a8d32
+    version: 0.14.2
+    sha256: c448f557e697a469bb67db6c21ea0315c59818aa3c1fea0a3b06b002ec555486
     pantry-tree:
-      size: 124048
-      sha256: 02ff29ab4d66af2d715043a0c1f3a874f6fdc823ad64dc0aa96e49f1fb2ddd26
+      size: 123741
+      sha256: 390bc5118ee808b882baa251d6fdf3d9027f11c93978005a828afbc9fc56db1c
   original:
     subdir: .
-    url: https://github.com/purescript/purescript/archive/v0.14.1.tar.gz
+    url: https://github.com/purescript/purescript/archive/v0.14.2.tar.gz
 snapshots:
 - completed:
     size: 565712

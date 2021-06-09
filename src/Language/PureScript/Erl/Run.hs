@@ -32,7 +32,7 @@ runProgram runModule =
         exitFailure 
       readProcessWithExitCode "erlc" (["-o", "ebin/"] ++ files) "" >>=
         exitOnFailure "Couldn't build with erlc"
-      res@(_, out, _) <- readProcessWithExitCode "erl" [ "-pa", "ebin", "-noshell", "-eval", "(" <> T.unpack erlName <> "())()", "-eval", "init:stop()" ] ""
+      res@(_, out, _) <- readProcessWithExitCode "erl" [ "-pa", "ebin", "-noshell", "-eval", "io:setopts([{encoding,utf8}]), (" <> T.unpack erlName <> "())()", "-eval", "init:stop()" ] ""
       exitOnFailure "Error running erl" res
       putStrLn out
       pure ()
