@@ -813,9 +813,9 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
   binderVars (VarBinder _ ident) = [ident]
   binderVars (NamedBinder _ ident binder) = ident : binderVars binder
   binderVars (LiteralBinder _ (ArrayLiteral es)) = concatMap binderVars es
-  binderVars (LiteralBinder _ (ObjectLiteral _)) = [] -- TODO
-  binderVars (ConstructorBinder _ _ _ binders) = concatMap binderVars binders
+  binderVars (LiteralBinder _ (ObjectLiteral fields)) = concatMap (binderVars . snd) fields
   binderVars (LiteralBinder _ _) = []
+  binderVars (ConstructorBinder _ _ _ binders) = concatMap binderVars binders
   binderVars (NullBinder _) = []
 
   -- replaceVars :: [(Ident, Ident)] -> Binder Ann -> Binder Ann
