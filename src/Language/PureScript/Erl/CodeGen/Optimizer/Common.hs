@@ -81,13 +81,10 @@ isRebound x =
     pure e
   go e = pure e
 
-  matchBinder (EFunBinder es _, _) = any (occurs x) es
+  -- matchBinder (EFunBinder es _, _) = any (occurs x) es
 
   matchCaseBinder (EBinder e) = occurs x e
   matchCaseBinder (EGuardedBinder e _) = occurs x e
-  
-  isVar (EVar _) = True
-  isVar _ = False
 
 -- TODO figure this into generic traversal with context pattern
 replaceIdents :: [(Text, Erl)] -> Erl -> Erl

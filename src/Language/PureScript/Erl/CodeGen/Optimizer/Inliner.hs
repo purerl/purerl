@@ -34,6 +34,7 @@ isEVar :: Erl -> Bool
 isEVar (EVar _) = True
 isEVar _ = False
 
+unEVar :: Erl -> Maybe Text
 unEVar (EVar x) = Just x
 unEVar _ = Nothing
 
@@ -56,7 +57,7 @@ beginBinds :: Erl -> Erl
 beginBinds = everywhereOnErl convert
   where
   convert :: Erl -> Erl
-  convert outer@(EApp (EBlock es) args)
+  convert (EApp (EBlock es) args)
     | e:evars <- reverse es
     , all (okBind args) evars
     = EBlock (reverse evars ++ [EApp e args])
@@ -67,7 +68,7 @@ beginBinds = everywhereOnErl convert
       (EVarBind x e) -> 
         (not $ x `Set.member` argVars) &&
         (all (\y -> not $ occurs y e) argVars)
-      other -> False
+      _ -> False
     )
 
     where 
