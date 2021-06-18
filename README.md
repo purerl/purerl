@@ -99,7 +99,7 @@ Erlang module: `foo_myModule@foreign`
 
 Note that the FFI code for a module must not only be in a file named correctly, but the module must be named the same as the output module with `@foreign` appended (so *not* following the Erlang module naming requirement until this gets copied to output).
 
-FFI files *MUST* export explicitly the exact set of identifiers which will be imported by the corresponding PureScript file. The compiler will check these exports and use them to inform codegen.
+FFI files *MUST* export explicitly the exact set of identifiers which will be imported by the corresponding PureScript file. The compiler will check these exports and use them to inform codegen.  
 
 *Auto-currying*: functions can be defined with any arity. According to the arity of the export (parsed from the export list) the compiler will automatically apply to the right number of arguments. By extension, values are exported as a function of arity 0 returning that value.
 
@@ -130,3 +130,49 @@ f(X) ->
     end
   end.
 ```
+
+## Calling purerl code from erlang
+
+Following the module name mangling and representation above, calling a purerl function defined as follows
+
+```purescript
+
+module Foo.Bar where
+
+import Prelude
+
+appendNumber :: String -> Int -> String
+appendNumber str n = str <> show n
+
+```
+
+goes something like this:
+
+```erlang
+-module(my_module).
+
+f() -> ((foo_bar@ps:appendNumber())(<<"hello">>))(42).
+
+```
+
+Note that `foo_bar@ps:appendNumber()` represents the function value, and we call that like a chain of arity-1 erlang functions as according to the number of curried arguments. Parentheses soon stack up due to erlang precendence. Fortunately, an uncurried overload is generated:
+
+```erlang
+-module(my_module).
+
+f() -> foo_bar@ps:appendNumber(<<"hello">>, 42).
+
+```
+
+These overloads should be generated at least for exported functions. 
+
+Note that functions with type class constraints should not be called from outside of PureScript, similar to the guidelines for FFI functions.
+
+## Generated types
+
+Several `.hrl` files are generated in `output`, with the intention of improving dialyzer analysis. For a module `Foo.Bar`
+
+* `foo_bar.hrl` - All types used in the module, this is imported by `foo_bar@foreign.hrl` and `foo_bar@ps`
+* `foo_bar@foreign.hrl` - Types of the foreign imports of the module - note that currently these are only able to be generated when the imports are exported by the PureScript module
+
+You may wish to import `foo_bar@foreign.hrl` in your FFI file in order to check the types of your imports, though bear in mind the `.erl` file will be copied from the source to `output/` - either some creative library paths or copying of the generated `hrl` will be required.
