@@ -1004,7 +1004,7 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
   --   Left gs -> Left $ map (\(g, e) -> (replaceGVars g, repalceEVars e)) gs
 
   replaceEVars :: [(Ident, Ident)] -> Expr Ann -> Expr Ann
-  replaceEVars vars (Var a (Qualified q x)) = Var a $ Qualified q $ fromMaybe x $ lookup x vars 
+  replaceEVars vars (Var a (Qualified Nothing x)) = Var a $ Qualified Nothing $ fromMaybe x $ lookup x vars 
   replaceEVars _ z = z
 
   replaceBVars :: [(Ident, Ident)] -> Binder Ann -> Binder Ann
