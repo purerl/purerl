@@ -214,6 +214,14 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
                       ]
                     ]
 
+                TAlias (Atom Nothing "boolean") [] -> do
+                  n <- mFreshNameErl argName
+                  pure $ Just
+                    [ECaseOf argName
+                      [(EGuardedBinder (EVar n) (Guard (EApp (EAtomLiteral (Atom (Just "erlang") "is_boolean")) [EVar n])), EAtomLiteral (Atom Nothing "typecheck"))
+                      ]
+                    ]
+
                 TAlias (Atom Nothing "binary") [] -> do
                   n <- mFreshNameErl argName
                   pure $ Just
