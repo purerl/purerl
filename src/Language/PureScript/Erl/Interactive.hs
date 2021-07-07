@@ -222,7 +222,7 @@ handleShowImportedModules print' = do
     Just $ N.showOp op
   showRef (P.TypeClassRef _ pn) =
     Just $ "class " <> N.runProperName pn
-  showRef (P.TypeInstanceRef _ ident) =
+  showRef (P.TypeInstanceRef _ ident _) =
     Just $ N.runIdent ident
   showRef (P.ModuleRef _ name) =
     Just $ "module " <> N.runModuleName name
