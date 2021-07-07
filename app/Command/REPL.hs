@@ -161,13 +161,13 @@ command = loop <$> options
     setup = do
       createDirectoryIfMissing True (modulesDir <> "/ebin")
 
-      _ <- Build.compile' (Build.BuildOptions modulesDir Nothing False)
+      _ <- Build.compile' (Build.BuildOptions modulesDir Nothing False False)
       files <- glob (modulesDir <> "*/*.erl")
       compileBeam True files
 
     eval :: state -> IO ()
     eval _ = do
-      _ <- Build.compile' (Build.BuildOptions modulesDir Nothing True)
+      _ <- Build.compile' (Build.BuildOptions modulesDir Nothing True False)
       compileBeam False [modulesDir <> "/$PSCI/$PSCI@ps.erl"]
       result <- readProcessWithExitCode "erl" ["-pa", modulesDir  <> "/ebin", "-noshell", "-eval", "('$PSCI@ps':'$main'())()", "-s", "erlang", "halt"] ""
       putStrResult result

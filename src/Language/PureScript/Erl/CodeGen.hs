@@ -81,14 +81,6 @@ import qualified Language.PureScript as P
 import Control.Monad.State (State, modify, runState, MonadState(..))
 
 
-indexed :: [a] -> [(Int, a)]
-indexed list =
-  let
-    f i [] = []
-    f i (a:ax) = (i,a) : f (i+1) ax
-  in
-  f 0 list
-
 freshNameErl :: (MonadSupply m) => m T.Text
 freshNameErl = fmap (("_@" <>) . T.pack . show) fresh
 
@@ -331,7 +323,7 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
                   -- default to mark function as unsafe
                   pure Nothing
 
-          mtargs <- traverse (fmap EBlock) <$> traverse (\(idx, (argName, argType)) -> typeArg (PathRoot fnNameRaw idx argName) (EVar argName, argType)) (indexed $ zipArgTypes argNames t)
+          mtargs <- traverse (fmap EBlock) <$> traverse (\(idx, (argName, argType)) -> typeArg (PathRoot fnNameRaw idx argName) (EVar argName, argType)) (zip [0..] $ zipArgTypes argNames t)
           case mtargs of
             Nothing -> pure []
             Just targs ->

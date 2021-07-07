@@ -48,6 +48,7 @@ data BuildOptions = BuildOptions
   { buildOutputDir    :: FilePath 
   , buildRun          :: Maybe String
   , buildQuiet        :: Bool
+  , buildChecked      :: Bool
   }
 
 data ModResult = ModResult
@@ -117,7 +118,7 @@ compile' BuildOptions{..} = do
     let modules' = catMaybes modules
         foreigns = M.fromList $ mapMaybe (\ModResult{ moduleName, foreignFile} -> (moduleName,) <$> foreignFile) modules'
         env = foldr P.applyExternsFileToEnvironment P.initEnvironment $ map externs modules'
-        buildActions = Make.buildActions buildOutputDir env foreigns True
+        buildActions = Make.buildActions buildOutputDir env foreigns True buildChecked
 
     let newCache :: CacheDb
         newCache = M.fromList $ map (\ModResult { moduleName, modulePath} -> (moduleName, CacheInfo modulePath M.empty)) modules'
@@ -246,17 +247,21 @@ run = Opts.optional $ Opts.strOption $
 
 quiet :: Opts.Parser Bool
 quiet = Opts.flag False True $
-    Opts.short 'q'
-    <> Opts.long "quiet"
-    <> Opts.help "Print less output"
+  Opts.short 'q'
+  <> Opts.long "quiet"
+  <> Opts.help "Print less output"
+
+checked :: Opts.Parser Bool
+checked = Opts.flag False True $
+  Opts.long "checked"
+  <> Opts.help "Generate wrapper modules with run-time type-checking of function arguments"
 
 
 buildOptions :: Opts.Parser BuildOptions
 buildOptions = BuildOptions <$> outputDirectory
                             <*> run
                             <*> quiet
-                            -- <*> (not <$> noPrefix)
-                            -- <*> jsonErrors
+                            <*> checked
 
 parser :: Opts.Parser (IO ())
 parser = compile <$> buildOptions

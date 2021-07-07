@@ -100,7 +100,7 @@ atom s
   atomChar '@' = True
   atomChar c = isDigit c || (isLatin1 c && isAlpha c)
 
-data ModuleType = ForeignModule | PureScriptModule | PureScriptSafeModule
+data ModuleType = ForeignModule | PureScriptModule | PureScriptCheckedModule
 
 atomModuleName :: ModuleName -> ModuleType -> Text
 atomModuleName = erlModuleName
@@ -110,7 +110,7 @@ erlModuleName mn moduleType = erlModuleNameBase mn <>
   case moduleType of
     ForeignModule -> "@foreign"
     PureScriptModule -> "@ps"
-    PureScriptSafeModule -> "@safeps"
+    PureScriptCheckedModule -> "@checked"
 
 erlModuleNameBase :: ModuleName ->  Text
 erlModuleNameBase (ModuleName name) =
