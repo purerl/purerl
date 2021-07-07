@@ -59,6 +59,7 @@ import Language.PureScript.Environment as E
       tyString )
 import qualified Language.PureScript.Constants.Prelude as C
 import qualified Language.PureScript.Constants.Prim as C
+import Language.PureScript.PSString (mkString)
 import Language.PureScript.Traversals (sndM)
 import Language.PureScript.AST (SourceSpan, nullSourceSpan, nullSourceAnn)
 
@@ -79,6 +80,14 @@ import Debug.Trace (traceM, trace)
 import qualified Language.PureScript as P
 import Control.Monad.State (State, modify, runState, MonadState(..))
 
+
+indexed :: [a] -> [(Int, a)]
+indexed list =
+  let
+    f i [] = []
+    f i (a:ax) = (i,a) : f (i+1) ax
+  in
+  f 0 list
 
 freshNameErl :: (MonadSupply m) => m T.Text
 freshNameErl = fmap (("_@" <>) . T.pack . show) fresh
@@ -132,6 +141,12 @@ erlDataMap = ModuleName "Erl.Data.Map"
 data FnArity = EffFnXArity Int | FnXArity Int | Arity (Int, Int)
 type ETypeEnv = Map T.Text ([T.Text], EType)
 
+data Path
+  = PathRecord Path Atom
+  | PathArray Path -- TODO[fh]: would be nice if we also fetched/stored the array index
+  | PathRoot T.Text Int T.Text
+  deriving (Show)
+
 -- |
 -- Generate code in the simplified Erlang intermediate representation for all declarations in a
 -- module.
@@ -141,7 +156,7 @@ moduleToErl :: forall m .
   => E.Environment
   -> Module Ann
   -> [(T.Text, Int)]
-  -> m ([T.Text], [Erl], [Erl], [Erl])
+  -> m ([T.Text], [Erl], [Erl], [Erl], [P.Text], [Erl])
 moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExports =
 
   -- translateType (TypeConstructor _ tname) | Just res <- M.lookup tname (E.names env)  = 
@@ -159,7 +174,7 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
         
         (exports, erlDecls, typeEnv') = concatRes $ res <> map (\(a,b,c) -> (a, b, maybe M.empty (snd . snd) c)) reexports
         namedSpecs = map (\(name, (args, ty)) -> EType (Atom Nothing name) args ty) $ M.toList $ M.union typeEnv typeEnv'
-     
+
     traverse_ checkExport foreigns
     let usedFfi = Set.fromList $ map runIdent foreigns
         definedFfi = Set.fromList (map fst foreignExports)
@@ -169,10 +184,165 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
 
     let attributes = findAttributes decls
 
-    return (map (\(a,i) -> runAtom a <> "/" <> T.pack (show i)) exports, namedSpecs, foreignSpecs, attributes ++ erlDecls)
+    safeDecls <- concat <$> traverse typecheckWrapper erlDecls
+
+    let safeExports = map (\(EFunctionDef _ _ fnName args _) -> (fnName, length args)) safeDecls
+        buildExport (a,i) = runAtom a <> "/" <> T.pack (show i)
+
+    return (map buildExport exports, namedSpecs, foreignSpecs, attributes ++ erlDecls, map buildExport safeExports, safeDecls)
   where
 
+  typecheckWrapper :: Erl -> m [Erl]
+  typecheckWrapper =
+    \case
+      EFunctionDef (Just (TFun [] _)) _ _ [] _ ->
+        -- TODO[fh]: is this correct? feels odd that both the list of args is empty and the body is a nullary fn, I expected one or the other but not both
+        pure []
+      EFunctionDef (Just t) sourceSpan fnName@(Atom _ fnNameRaw) argNames _ ->
+        do
+          let
+            pathToPSString =
+              \case
+                PathRecord p (Atom _ field) -> pathToPSString p <> "." <> mkString field
+                PathRecord p (AtomPS _ field) -> pathToPSString p <> "." <> field
+                PathArray p -> pathToPSString p <> "[?]"
+                PathRoot s idx var -> mkString s <> "->" <> mkString (T.pack $ show idx) <> "(" <> mkString var <> ")"
 
+            typeError path thing =
+              ( EBinder (EVar "_")
+              , EApp
+                  (EAtomLiteral (Atom (Just "erlang") "error"))
+                  [EStringLiteral $ "purerl runtime ffi type error: " <> pathToPSString path <> " " <> thing]
+              )
+
+            -- try to reuse bound names if possible
+            mFreshNameErl (EVar x) = pure x
+            mFreshNameErl _ = freshNameErl
+
+            zipArgTypes [] _ = []
+            zipArgTypes (argName:rest) (TFun (argT:restT) rhs) = (argName, argT) : zipArgTypes rest (TFun restT rhs)
+            zipArgTypes _ _ = error "unexpected arg to zipArgTypes"
+
+            typeArg :: Path -> (Erl, EType) -> m (Maybe [Erl])
+            typeArg path (argName, argT) =
+              -- fmap (EComment (T.pack $ show argName <> " :: " <> show argT) :) <$>
+              case argT of
+                TInteger -> do
+                  n <- mFreshNameErl argName
+                  pure $ Just
+                    [ECaseOf argName
+                      [(EGuardedBinder (EVar n) (Guard (EApp (EAtomLiteral (Atom (Just "erlang") "is_integer")) [EVar n])), EAtomLiteral (Atom Nothing "typecheck"))
+                      , typeError path "is not an integer"
+                      ]
+                    ]
+
+                TFloat -> do
+                  n <- mFreshNameErl argName
+                  pure $ Just
+                    [ECaseOf argName
+                      [(EGuardedBinder (EVar n) (Guard (EApp (EAtomLiteral (Atom (Just "erlang") "is_float")) [EVar n])), EAtomLiteral (Atom Nothing "typecheck"))
+                      , typeError path "is not a float"
+                      ]
+                    ]
+
+                TAlias (Atom Nothing "boolean") [] -> do
+                  n <- mFreshNameErl argName
+                  pure $ Just
+                    [ECaseOf argName
+                      [(EGuardedBinder (EVar n) (Guard (EApp (EAtomLiteral (Atom (Just "erlang") "is_boolean")) [EVar n])), EAtomLiteral (Atom Nothing "typecheck"))
+                      , typeError path "is not true or false"
+                      ]
+                    ]
+
+                TAlias (Atom Nothing "binary") [] -> do
+                  n <- mFreshNameErl argName
+                  pure $ Just
+                    [ECaseOf argName
+                      [(EGuardedBinder (EVar n) (Guard (EApp (EAtomLiteral (Atom (Just "erlang") "is_binary")) [EVar n])), EAtomLiteral (Atom Nothing "typecheck"))
+                      , typeError path "is not an utf-8 encoded binary"
+                      ]
+                    ]
+
+                TRemote "array" "array" [innerType] -> do
+                  n <- mFreshNameErl argName
+                  innerName <- EVar <$> freshNameErl
+                  mInnerTypeCheck <- typeArg (PathArray path) (innerName, innerType)
+                  case mInnerTypeCheck of
+                    Nothing -> pure $ Nothing
+                    Just innerTypeCheck ->
+                      pure $ Just
+                        [ECaseOf
+                          (EApp (EAtomLiteral (Atom (Just "array") "is_array")) [EVar n])
+                          [ ( EBinder (EAtomLiteral (Atom Nothing "true"))
+                            , (EApp
+                                (EAtomLiteral (Atom (Just "array") "map"))
+                                [ EFunFull Nothing
+                                  [ ( EFunBinder [innerName] Nothing
+                                    , EBlock innerTypeCheck
+                                    )
+                                  ]
+                                , EVar n
+                                ]
+                              )
+                            )
+                          , typeError path "failed is_array check; it's not an array"
+                          ]
+                        ]
+
+                TMap (Just pairs) ->
+                  let
+                    unwrapMapKeys :: [(EType, EType)] -> Maybe [(Atom, EType)]
+                    unwrapMapKeys [] = Just []
+                    unwrapMapKeys ((TAtom (Just k),v):rest) =
+                      unwrapMapKeys rest <> Just [(k,v)]
+                    unwrapMapKeys _ = Nothing
+                  in
+                  case unwrapMapKeys pairs of
+                    Nothing -> pure Nothing
+                    Just unwrapped -> do
+                      trios <- traverse (\(a,v) -> do
+                        n <- freshNameErl
+                        pure (a, EVar n, v)
+                        ) unwrapped
+                      let aePairs = map (\(a,e,_) -> (a,e)) trios
+                      mtypechecks :: Maybe [Erl] <- traverse (fmap EBlock) <$> traverse (\(a,e,v) -> typeArg (PathRecord path a) (e,v)) trios
+
+                      case mtypechecks of
+                        Nothing -> pure Nothing
+                        Just (typechecks :: [Erl]) ->
+                          pure $ Just $
+                            [ECaseOf argName
+                              [(EGuardedBinder (EMapPattern aePairs)
+                                (Guard
+                                  (EBinary
+                                    EqualTo
+                                    (EApp (EAtomLiteral (Atom (Just "erlang") "map_size")) [argName])
+                                    (ENumericLiteral (Left (fromIntegral (length aePairs))))
+                                  )
+                                ), EBlock typechecks)
+                              , ( EBinder (EMapPattern aePairs)
+                                , snd (typeError path "failed map_size check; there's too many fields in this record")
+                                )
+                              , typeError path "is missing at least one field"
+                              ]
+                            ]
+
+                _ ->
+                  -- default to mark function as unsafe
+                  pure Nothing
+
+          mtargs <- traverse (fmap EBlock) <$> traverse (\(idx, (argName, argType)) -> typeArg (PathRoot fnNameRaw idx argName) (EVar argName, argType)) (indexed $ zipArgTypes argNames t)
+          case mtargs of
+            Nothing -> pure []
+            Just targs ->
+              pure $
+                [ EFunctionDef (Just t) sourceSpan (fnName) argNames $ EBlock
+                  $ targs
+                    <> [EApp (EAtomLiteral $ Atom (Just $ atomModuleName mn PureScriptModule) fnNameRaw) (map EVar argNames)]
+                ]
+
+      _ ->
+        pure []
 
   types :: M.Map (Qualified Ident) SourceType
   types = M.map (\(t, _, _) -> t) $ E.names env
