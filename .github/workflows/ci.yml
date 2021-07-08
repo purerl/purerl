@@ -53,9 +53,9 @@ jobs:
           mkdir -p "$STACK_ROOT"
           echo "local-programs-path: $STACK_ROOT/programs" > $STACK_ROOT/config.yaml
 
-      - run: "ci/run-hlint.sh --git"
-        env:
-          VERSION: "2.2.11"
+      # - run: "ci/run-hlint.sh --git"
+      #   env:
+      #     VERSION: "2.2.11"
 
       - run: "ci/build.sh"
 
