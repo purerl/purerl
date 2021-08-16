@@ -16,7 +16,8 @@ Currently the `purerl` executable should correspond to `purs` compiler versions 
 
 | `purerl` version | `purs` version |
 | --- |  --- |
-| 0.0.10+ | 0.14.2 |
+| 0.0.11 | 0.14.3 |
+| 0.0.10 | 0.14.2 |
 | 0.0.9 | 0.14.1 |
 | 0.0.8 | 0.14.0 |
 | 0.0.7 | 0.13.8 |
@@ -66,11 +67,9 @@ The standard PureScript IDE tooling based on `purs ide` and editor plugins and/o
 
 # purerl erlang representation and FFI usage
 
-Module names `Foo.Bar` are transformed to a lower-snake cased form `foo_bar` (any non-initial uppercase chars will be preserved as such), with a suffix `@ps` to avoid clashing with built-in erlang modules.
-
-Top level declarations are uniformly output as nullary functions. Identifiers are preserved, with quoting if required. Thus a normal invocation of the output will look like `(main@ps:main())()`.
-
 ## Types
+
+The compiler knows of primitive types and the corresponding Erlang types, and some others for codegen optimisations, some other library types are included here for reference.
 
 | PureScript type | Erlang type | Notes |
 | --- | --- | --- |
@@ -84,9 +83,26 @@ Top level declarations are uniformly output as nullary functions. Identifiers ar
 | Newtype | as underlying type |
 | Functions | Function (arity 1 - but see FFI) |
 | `Data.Function.Uncurried.FnX` | Function (arity `X`) | Actual higher arity functions - for 'uncurried' functions from tuples see `Erl.Data.Tuple`  | 
+| `Effect.Uncurried.EffectFnX` | Function (arity `X`) | Actual higher arity functions (with effectful behaviour) | 
 | `Erl.Data.List`  | `list()`| Native lists via  `purescript-erl-lists` |
 | `Erl.Data.Tuple` | `tuple()` | Native tuples via `purescript-erl-tuples` |
-| `Erl.Data.Map` | `tuple()` | Map with homogenous key/value types |
+| `Erl.Data.Map` | `#{tkey() => tvalue()}` | Map with homogenous key/value types |
+| `Erl.Data.Binary` | `binary()` | Abitrary binaries (see also `IOList`) |
+
+### Top level representation
+
+Top level declarations are uniformly output as nullary functions, where arguments are curried as in the PureScript types. Identifiers are preserved, with quoting if required. Thus a normal invocation of the output will look like `(main@ps:main())()`. An uncurried version is also provided (and used in generated code), see below.
+
+There is special handling of values of the following types at the top level:
+
+* `Data.Function.Uncurried.FnX` 
+* `Data.Function.Uncurried.EffectFnX`
+
+These will generate code as for an `X` arity function, i.e. an arity `X` overload will be generated directly, being suitable for usage in callback module implementations, allowing for code replacement, etc.
+
+## Modules
+
+Module names `Foo.Bar` are transformed to a lower-snake cased form `foo_bar` (any non-initial uppercase chars will be preserved as such), with a suffix `@ps` to avoid clashing with built-in erlang modules.
 
 ## FFI
 In place of `.js` FFI files, the Erlang backend has `.erl` FFI files. As per the regular compiler since 0.9, these must be placed along the corresponding `.purs` file with the same name.
