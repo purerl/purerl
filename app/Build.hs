@@ -4,6 +4,7 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE BlockArguments #-}
 
 
 module Build (parser, compile, compile', BuildOptions(..)) where
@@ -11,7 +12,9 @@ module Build (parser, compile, compile', BuildOptions(..)) where
 import Prelude
 import           Control.Exception (tryJust)
 import           Control.Monad
-import           Data.Maybe (catMaybes, mapMaybe, fromMaybe)
+import           Data.Maybe (catMaybes, mapMaybe, fromMaybe, isNothing)
+import           Data.Either (isLeft)
+import           Protolude (hush)
 import qualified Data.Map as M
 import Data.Map (Map)
 import qualified Language.PureScript as P
@@ -43,6 +46,9 @@ import Data.Time.Clock (UTCTime)
 
 import qualified Data.HashMap.Strict as HashMap
 import GHC.Generics (Generic)
+
+
+import Debug.Trace
 
 data BuildOptions = BuildOptions
   { buildOutputDir    :: FilePath 
@@ -115,6 +121,10 @@ compile' BuildOptions{..} = do
           liftIO $ hPutStrLn stderr $ "Error parsing externs: " <> extern
           pure Nothing
 
+    liftIO $ when (any isNothing modules) do
+      hPutStrLn stderr $ "Exiting due to externs error"
+      exitFailure
+
     let modules' = catMaybes modules
         foreigns = M.fromList $ mapMaybe (\ModResult{ moduleName, foreignFile} -> (moduleName,) <$> foreignFile) modules'
         env = foldr P.applyExternsFileToEnvironment P.initEnvironment $ map externs modules'
@@ -134,13 +144,20 @@ compile' BuildOptions{..} = do
             | Just (_version, module') <- parseMaybe CoreFn.moduleFromJSON coreFn' -> do
             _ <- runSupplyT 0 $ Make.codegen buildActions module'
             Make.ffiCodegen buildActions module'
-            pure $ Just module'
+            pure $ Just $ Right module'
           _ -> do
             liftIO $ hPutStrLn stderr $ "Error parsing corefn: " <> T.unpack (P.runModuleName moduleName)
-            pure Nothing
+            pure $ Just $ Left moduleName
       else 
         pure Nothing
-    pure $ catMaybes res
+    let res' = catMaybes res
+
+    liftIO $ when (any isLeft res') do
+      traceShowM res
+      hPutStrLn stderr $ "Exiting due to corefn error"
+      exitFailure
+
+    pure $ catMaybes $ hush <$> res'
 
   printWarningsAndErrors False False makeWarnings makeErrors
 
