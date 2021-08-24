@@ -207,9 +207,16 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
                   [EStringLiteral $ "purerl runtime ffi type error: " <> pathToPSString path <> " " <> thing]
               )
 
+            simpleCheck checkVar binderVar check =
+              let binderVar' = if binderVar == checkVar
+                               then EVar "_"
+                               else binderVar
+              in
+              (EGuardedBinder binderVar' (Guard (EApp (EAtomLiteral (Atom (Just "erlang") check)) [checkVar])), EAtomLiteral (Atom Nothing "typecheck"))
+
             -- try to reuse bound names if possible
-            mFreshNameErl (EVar x) = pure x
-            mFreshNameErl _ = freshNameErl
+            maybeFreshVar x@(EVar _) = pure x
+            maybeFreshVar _ = EVar <$> freshNameErl
 
             zipArgTypes [] _ = []
             zipArgTypes (argName:rest) (TFun (argT:restT) rhs) = (argName, argT) : zipArgTypes rest (TFun restT rhs)
@@ -220,43 +227,43 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
               -- fmap (EComment (T.pack $ show argName <> " :: " <> show argT) :) <$>
               case argT of
                 TInteger -> do
-                  n <- mFreshNameErl argName
+                  bindName <- maybeFreshVar argName
                   pure $ Just
                     [ECaseOf argName
-                      [(EGuardedBinder (EVar n) (Guard (EApp (EAtomLiteral (Atom (Just "erlang") "is_integer")) [EVar n])), EAtomLiteral (Atom Nothing "typecheck"))
+                      [ simpleCheck argName bindName "is_integer"
                       , typeError path "is not an integer"
                       ]
                     ]
 
                 TFloat -> do
-                  n <- mFreshNameErl argName
+                  bindName <- maybeFreshVar argName
                   pure $ Just
                     [ECaseOf argName
-                      [(EGuardedBinder (EVar n) (Guard (EApp (EAtomLiteral (Atom (Just "erlang") "is_float")) [EVar n])), EAtomLiteral (Atom Nothing "typecheck"))
+                      [ simpleCheck argName bindName "is_float"
                       , typeError path "is not a float"
                       ]
                     ]
 
                 TAlias (Atom Nothing "boolean") [] -> do
-                  n <- mFreshNameErl argName
+                  bindName <- maybeFreshVar argName
                   pure $ Just
                     [ECaseOf argName
-                      [(EGuardedBinder (EVar n) (Guard (EApp (EAtomLiteral (Atom (Just "erlang") "is_boolean")) [EVar n])), EAtomLiteral (Atom Nothing "typecheck"))
+                      [ simpleCheck argName bindName "is_boolean"
                       , typeError path "is not true or false"
                       ]
                     ]
 
                 TAlias (Atom Nothing "binary") [] -> do
-                  n <- mFreshNameErl argName
+                  bindName <- maybeFreshVar argName
                   pure $ Just
                     [ECaseOf argName
-                      [(EGuardedBinder (EVar n) (Guard (EApp (EAtomLiteral (Atom (Just "erlang") "is_binary")) [EVar n])), EAtomLiteral (Atom Nothing "typecheck"))
+                      [ simpleCheck argName bindName "is_binary"
                       , typeError path "is not an utf-8 encoded binary"
                       ]
                     ]
 
                 TRemote "array" "array" [innerType] -> do
-                  n <- mFreshNameErl argName
+                  bindName <- maybeFreshVar argName
                   innerName <- EVar <$> freshNameErl
                   mInnerTypeCheck <- typeArg (PathArray path) (innerName, innerType)
                   case mInnerTypeCheck of
@@ -264,7 +271,7 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
                     Just innerTypeCheck ->
                       pure $ Just
                         [ECaseOf
-                          (EApp (EAtomLiteral (Atom (Just "array") "is_array")) [EVar n])
+                          (EApp (EAtomLiteral (Atom (Just "array") "is_array")) [bindName])
                           [ ( EBinder (EAtomLiteral (Atom Nothing "true"))
                             , (EApp
                                 (EAtomLiteral (Atom (Just "array") "map"))
@@ -273,7 +280,7 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
                                     , EBlock innerTypeCheck
                                     )
                                   ]
-                                , EVar n
+                                , bindName
                                 ]
                               )
                             )
