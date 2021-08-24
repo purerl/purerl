@@ -22,6 +22,7 @@ import           Data.Foldable (for_)
 import qualified Language.PureScript as P
 import qualified Language.PureScript.CST as CST
 import           Language.PureScript.Erl.Interactive
+import           Language.PureScript.Erl.Run (compileBeam)
 
 import qualified Options.Applicative as Opts
 import           System.Console.Haskeline
@@ -146,18 +147,10 @@ command = loop <$> options
                   handleInterrupt (outputStrLn "Interrupted.")
                                   (withInterrupt (lift (for_ cmds (handleCommand' state))))
 
-            putStrLn prologueMessage
             backendState <- setup
             runner (lift (loadUserConfig backendState) >> go backendState)
 
         return ()
-
-    
-    compileBeam :: Bool -> [String] -> IO ()
-    compileBeam noisy files = do 
-      result <- readProcessWithExitCode "erlc" (["-o", modulesDir <> "/ebin"] ++ files) ""
-      when noisy $
-        putStrResult result
 
     setup :: IO ()
     setup = do
@@ -167,12 +160,14 @@ command = loop <$> options
       _ <- Build.compile' (Build.BuildOptions modulesDir Nothing False False)
       files <- glob (modulesDir <> "*/*.erl")
       putStrLn "Compiling erlang beams"
-      compileBeam True files
+      compileBeam True (modulesDir <> "/ebin") files
+      putStrLn prologueMessage
+
 
     eval :: state -> IO ()
     eval _ = do
       _ <- Build.compile' (Build.BuildOptions modulesDir Nothing True False)
-      compileBeam False [modulesDir <> "/$PSCI/$PSCI@ps.erl"]
+      compileBeam False ( modulesDir <> "/ebin") [modulesDir <> "/$PSCI/$PSCI@ps.erl"]
       result <- readProcessWithExitCode "erl" ["-pa", modulesDir  <> "/ebin", "-noshell", "-eval", "('$PSCI@ps':'$main'())()", "-s", "erlang", "halt"] ""
       putStrResult result
       

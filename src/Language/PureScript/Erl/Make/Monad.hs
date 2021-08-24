@@ -13,6 +13,7 @@ module Language.PureScript.Erl.Make.Monad
   , writeTextFile
   , writeJSONFile
   , copyFile
+  , catchDoesNotExist
   ) where
 
 import           Prelude
