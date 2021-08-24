@@ -30,7 +30,6 @@ import           Data.Time.Clock (UTCTime)
 
 import qualified Paths_purerl as Paths
 
-import           Language.PureScript.Erl.CoreFn (transformCoreFn)
 import           Language.PureScript.Erl.CodeGen.Common (erlModuleName, erlModuleNameBase, atomModuleName, atom, ModuleType(..))
 import           Language.PureScript.Erl.CodeGen (moduleToErl)
 import           Language.PureScript.Erl.CodeGen.Optimizer (optimize)
@@ -73,8 +72,7 @@ buildActions outputDir env foreigns usePrefix generateChecked =
       Nothing ->
         return []
 
-    let m' = transformCoreFn m
-    (exports, typeDecls, foreignSpecs, rawErl, checkedExports, checkedRawErl) <- moduleToErl env m' foreignExports
+    (exports, typeDecls, foreignSpecs, rawErl, checkedExports, checkedRawErl) <- moduleToErl env m foreignExports
 
     optimized <- traverse optimize rawErl
     checked <- traverse optimize checkedRawErl
