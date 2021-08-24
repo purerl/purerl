@@ -83,9 +83,11 @@ command = loop <$> options
           when (null modules) . liftIO $ do
             putStr noInputMessage
             exitFailure
+          liftIO $ putStrLn "Building PureScript sources"
           unless (supportModuleIsDefined (map (P.getModuleName . snd) modules)) . liftIO $ do
             putStr supportModuleMessage
             exitFailure
+          
           (externs, _) <- ExceptT . runMake . make $ fmap CST.pureResult <$> modules
           return (modules, externs)
 
@@ -161,8 +163,10 @@ command = loop <$> options
     setup = do
       createDirectoryIfMissing True (modulesDir <> "/ebin")
 
+      putStrLn "Generating erlang for purerl backend"
       _ <- Build.compile' (Build.BuildOptions modulesDir Nothing False False)
       files <- glob (modulesDir <> "*/*.erl")
+      putStrLn "Compiling erlang beams"
       compileBeam True files
 
     eval :: state -> IO ()
