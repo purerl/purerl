@@ -16,6 +16,7 @@ Currently the `purerl` executable should correspond to `purs` compiler versions 
 
 | `purerl` version | `purs` version |
 | --- |  --- |
+| 0.0.12 | 0.14.4 |
 | 0.0.11 | 0.14.3 |
 | 0.0.10 | 0.14.2 |
 | 0.0.9 | 0.14.1 |
