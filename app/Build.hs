@@ -42,7 +42,7 @@ import           Language.PureScript.Erl.Errors as E
 import           Language.PureScript.Erl.Errors.JSON
 import           Control.Monad.Supply
 import           Language.PureScript.Erl.Run (runProgram)
-import Data.Time.Clock (UTCTime)
+import Data.Time.Clock (UTCTime, getCurrentTime)
 
 import qualified Data.HashMap.Strict as HashMap
 import GHC.Generics (Generic)
@@ -73,6 +73,7 @@ compile opts = do
 
 compile' :: BuildOptions -> IO (Maybe [CoreFn.Module CoreFn.Ann])
 compile' BuildOptions{..} = do
+  buildStartTime <- getCurrentTime
   let coreFnGlob = joinPath [ buildOutputDir, "*", "corefn.json" ]
       cacheDbFile = joinPath [ buildOutputDir, "purerl-cache-db.json" ]
   corefnFiles <- globWarningOnMisses warnFileTypeNotFound [coreFnGlob]
@@ -107,15 +108,20 @@ compile' BuildOptions{..} = do
                               liftIO $ hPutStrLn stderr $ "Error parsing corefn: " <> corefn
                               pure Nothing
           case M.lookup moduleName' cache of
-            Just CacheInfo { sourceFile = sourceFile } -> do
-              exists <- liftIO $ doesFileExist sourceFile
-              if exists then do
-                foreignFile <- liftIO $ inferForeignModule' sourceFile
-                inputTime <- latestInputTimestamp corefn extern foreignFile
-                pure $ Just $ ModResult moduleName' sourceFile res foreignFile resExterns' inputTime
-              else
+            Just CacheInfo { sourceFile = (sourceFile, timestamp) } -> do
+              pursInputTime <- latestPursInputTimestamp corefn extern
+              if pursInputTime > timestamp then
                 fromCorefn
-            Nothing -> fromCorefn
+              else do
+                exists <- liftIO $ doesFileExist sourceFile
+                if exists then do
+                  foreignFile <- liftIO $ inferForeignModule' sourceFile
+                  inputTime <- latestInputTimestamp corefn extern foreignFile
+                  pure $ Just $ ModResult moduleName' sourceFile res foreignFile resExterns' inputTime
+                else
+                  fromCorefn
+            Nothing -> 
+              fromCorefn
 
         Nothing -> do
           liftIO $ hPutStrLn stderr $ "Error parsing externs: " <> extern
@@ -131,7 +137,7 @@ compile' BuildOptions{..} = do
         buildActions = Make.buildActions buildOutputDir env foreigns True buildChecked
 
     let newCache :: CacheDb
-        newCache = M.fromList $ map (\ModResult { moduleName, modulePath} -> (moduleName, CacheInfo modulePath M.empty)) modules'
+        newCache = M.fromList $ map (\ModResult { moduleName, modulePath} -> (moduleName, CacheInfo (modulePath, buildStartTime) M.empty)) modules'
     MM.writeJSONFile cacheDbFile newCache
 
     res <- forM modules' $ \ModResult{ moduleName, coreFn, inputTimestamp} -> do
@@ -170,10 +176,13 @@ compile' BuildOptions{..} = do
   where
 
   latestInputTimestamp corefn extern foreignFile = do
-    sourceTime <- max <$> MM.getTimestamp corefn <*> MM.getTimestamp extern
+    sourceTime <- latestPursInputTimestamp corefn extern
     case foreignFile of
       Just ff -> max <$> MM.getTimestamp ff <*> pure sourceTime
       Nothing -> pure sourceTime
+
+  latestPursInputTimestamp corefn extern = 
+    max <$> MM.getTimestamp corefn <*> MM.getTimestamp extern
 
 
   needsBuild buildActions ts m = do
@@ -288,7 +297,7 @@ parser = compile <$> buildOptions
 type CacheDb = Map P.ModuleName CacheInfo
 
 data CacheInfo = CacheInfo
-  { sourceFile :: FilePath
+  { sourceFile :: (FilePath, UTCTime)
   , cacheInfo :: Map FilePath UTCTime }
   deriving (Generic, Show)
 
