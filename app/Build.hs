@@ -62,7 +62,7 @@ data ModResult = ModResult
   , modulePath :: FilePath
   , coreFn :: Maybe Value
   , foreignFile :: Maybe FilePath
-  , externs :: P.ExternsFile
+  , externs :: MM.Make (Maybe P.ExternsFile)
   , inputTimestamp :: UTCTime
   }
 
@@ -86,84 +86,88 @@ compile' BuildOptions{..} = do
     cache <- fromMaybe M.empty <$> MM.readJSONFile cacheDbFile
     modules <- forM corefnFiles $ \corefn -> do
       let extern = replaceFileName corefn "externs.cbor"
-      let modStr = last $ FP.splitPath $ FP.takeDirectory corefn
-      let moduleName' = P.ModuleName $ T.pack modStr
+          modStr = last $ FP.splitPath $ FP.takeDirectory corefn
+          moduleName' = P.ModuleName $ T.pack modStr
 
       -- Aeson JSON handling is lazy, but if we evaluate the outer Maybe Value we incur the
       -- cost of constructing the big top-level object even if we don't look at it
       res <- readJSONFile corefn
-      resExterns <- MM.readExternsFile extern
+      let readExterns = do
+            resExterns <- MM.readExternsFile extern
+            case resExterns of
+              Just resExterns' -> do
+                unless (P.externsIsCurrentVersion resExterns') $
+                  liftIO $ hPutStrLn stderr $ "Found externs for wrong compiler version (continuing anyway): " <> extern
+                pure $ Just resExterns'
+              Nothing -> do
+                liftIO $ hPutStrLn stderr $ "Error parsing externs: " <> extern
+                pure Nothing
 
-      case resExterns of
-        Just resExterns' -> do
-          unless (P.externsIsCurrentVersion resExterns') $
-            liftIO $ hPutStrLn stderr $ "Found externs for wrong compiler version (continuing anyway): " <> extern
-          let fromCorefn = case res of
-                            Just res' -> do
-                              let Just modulePath = getModulePath res'
-                              foreignFile <- liftIO $ inferForeignModule' modulePath
-                              inputTime <- latestInputTimestamp corefn extern foreignFile
-                              pure $ Just $ ModResult moduleName' modulePath res foreignFile resExterns' inputTime
-                            Nothing -> do
-                              liftIO $ hPutStrLn stderr $ "Error parsing corefn: " <> corefn
-                              pure Nothing
-          case M.lookup moduleName' cache of
-            Just CacheInfo { sourceFile = (sourceFile, timestamp) } -> do
-              pursInputTime <- latestPursInputTimestamp corefn extern
-              if pursInputTime > timestamp then
-                fromCorefn
-              else do
-                exists <- liftIO $ doesFileExist sourceFile
-                if exists then do
-                  foreignFile <- liftIO $ inferForeignModule' sourceFile
-                  inputTime <- latestInputTimestamp corefn extern foreignFile
-                  pure $ Just $ ModResult moduleName' sourceFile res foreignFile resExterns' inputTime
-                else
-                  fromCorefn
-            Nothing -> 
+      let fromCorefn = case res of
+                        Just res' -> do
+                          let Just modulePath = getModulePath res'
+                          foreignFile <- liftIO $ inferForeignModule' modulePath
+                          inputTime <- latestInputTimestamp corefn extern foreignFile
+                          pure $ Just $ ModResult moduleName' modulePath res foreignFile readExterns inputTime
+                        Nothing -> do
+                          liftIO $ hPutStrLn stderr $ "Error parsing corefn: " <> corefn
+                          pure Nothing
+      case M.lookup moduleName' cache of
+        Just CacheInfo { sourceFile = (sourceFile, timestamp) } -> do
+          pursInputTime <- latestPursInputTimestamp corefn extern
+          if pursInputTime > timestamp then
+            fromCorefn
+          else do
+            exists <- liftIO $ doesFileExist sourceFile
+            if exists then do
+              foreignFile <- liftIO $ inferForeignModule' sourceFile
+              inputTime <- latestInputTimestamp corefn extern foreignFile
+              pure $ Just $ ModResult moduleName' sourceFile res foreignFile readExterns inputTime
+            else
               fromCorefn
-
-        Nothing -> do
-          liftIO $ hPutStrLn stderr $ "Error parsing externs: " <> extern
-          pure Nothing
-
-    liftIO $ when (any isNothing modules) do
-      hPutStrLn stderr $ "Exiting due to externs error"
-      exitFailure
+        Nothing -> 
+          fromCorefn
 
     let modules' = catMaybes modules
         foreigns = M.fromList $ mapMaybe (\ModResult{ moduleName, foreignFile} -> (moduleName,) <$> foreignFile) modules'
-        env = foldr P.applyExternsFileToEnvironment P.initEnvironment $ map externs modules'
-        buildActions = Make.buildActions buildOutputDir env foreigns True buildChecked
+        buildActions = Make.buildActions buildOutputDir foreigns True buildChecked
 
     let newCache :: CacheDb
         newCache = M.fromList $ map (\ModResult { moduleName, modulePath} -> (moduleName, CacheInfo (modulePath, buildStartTime) M.empty)) modules'
     MM.writeJSONFile cacheDbFile newCache
 
-    res <- forM modules' $ \ModResult{ moduleName, coreFn, inputTimestamp} -> do
-      shouldBuild <- needsBuild buildActions inputTimestamp moduleName
-      if shouldBuild then do
+    needToBuild <- filterM (\ModResult{ moduleName, inputTimestamp} -> needsBuild buildActions inputTimestamp moduleName) modules'
+    
+    if null needToBuild then do
+      pure []
+    else do
+      externsFiles <- traverse externs modules'
+      when (any isNothing externsFiles) $ liftIO do
+        hPutStrLn stderr $ "Exiting due to externs error"
+        exitFailure
+
+      let env = foldr P.applyExternsFileToEnvironment P.initEnvironment (catMaybes externsFiles)
+    
+      res :: [Either P.ModuleName (CoreFn.Module CoreFn.Ann)]
+          <- forM needToBuild \ModResult{ moduleName, coreFn } -> do
         unless buildQuiet $
           liftIO $ hPutStrLn stderr $ "Building " <> T.unpack (P.runModuleName moduleName)
         case coreFn of
           Just coreFn'
             | Just (_version, module') <- parseMaybe CoreFn.moduleFromJSON coreFn' -> do
-            _ <- runSupplyT 0 $ Make.codegen buildActions module'
+            _ <- runSupplyT 0 $ Make.codegen buildActions env module'
             Make.ffiCodegen buildActions module'
-            pure $ Just $ Right module'
+            pure $ Right module'
           _ -> do
             liftIO $ hPutStrLn stderr $ "Error parsing corefn: " <> T.unpack (P.runModuleName moduleName)
-            pure $ Just $ Left moduleName
-      else 
-        pure Nothing
-    let res' = catMaybes res
+            pure $ Left moduleName
 
-    liftIO $ when (any isLeft res') do
-      traceShowM res
-      hPutStrLn stderr $ "Exiting due to corefn error"
-      exitFailure
+      liftIO $ when (any isLeft res) do
+        traceShowM res
+        hPutStrLn stderr $ "Exiting due to corefn error"
+        exitFailure
 
-    pure $ catMaybes $ hush <$> res'
+      pure $ catMaybes $ hush <$> res
 
   printWarningsAndErrors False False makeWarnings makeErrors
 

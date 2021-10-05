@@ -40,7 +40,7 @@ import Language.PureScript.Erl.Errors.Types
 import Data.Either (fromRight)
 
 data MakeActions m = MakeActions
-  { codegen :: CF.Module CF.Ann -> SupplyT m ()
+  { codegen :: P.Environment -> CF.Module CF.Ann -> SupplyT m ()
   -- ^ Run the code generator for the module and write any required output files.
   , ffiCodegen :: CF.Module CF.Ann -> m ()
   , getOutputTimestamp :: P.ModuleName -> m (Maybe UTCTime)
@@ -49,8 +49,8 @@ data MakeActions m = MakeActions
   -- output files are missing.
   }
 
-buildActions :: String -> P.Environment -> M.Map P.ModuleName FilePath -> Bool -> Bool -> MakeActions Make
-buildActions outputDir env foreigns usePrefix generateChecked =
+buildActions :: String  -> M.Map P.ModuleName FilePath -> Bool -> Bool -> MakeActions Make
+buildActions outputDir foreigns usePrefix generateChecked =
   MakeActions codegen ffiCodegen getOutputTimestamp
   where
 
@@ -60,8 +60,8 @@ buildActions outputDir env foreigns usePrefix generateChecked =
     timestamps <- traverse getTimestampMaybe outputPaths
     pure $ fmap minimum . NEL.nonEmpty =<< sequence timestamps
 
-  codegen :: CF.Module CF.Ann -> SupplyT Make ()
-  codegen m = do
+  codegen ::  P.Environment -> CF.Module CF.Ann -> SupplyT Make ()
+  codegen env m = do
     let mn = CF.moduleName m
     foreignExports <- lift $ case mn `M.lookup` foreigns of
       Just path
