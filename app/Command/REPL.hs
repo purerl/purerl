@@ -168,7 +168,7 @@ command = loop <$> options
     eval _ = do
       _ <- Build.compile' (Build.BuildOptions modulesDir Nothing True False)
       compileBeam False ( modulesDir <> "/ebin") [modulesDir <> "/$PSCI/$PSCI@ps.erl"]
-      result <- readProcessWithExitCode "erl" ["-pa", modulesDir  <> "/ebin", "-noshell", "-eval", "('$PSCI@ps':'$main'())()", "-s", "erlang", "halt"] ""
+      result <- readProcessWithExitCode "erl" ["-pa", modulesDir  <> "/ebin", "-noshell", "-eval", "io:setopts([{encoding,utf8}]), ('$PSCI@ps':'$main'())()", "-s", "erlang", "halt"] ""
       putStrResult result
       
     putStrResult :: (ExitCode, String, String) -> IO ()
