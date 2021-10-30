@@ -80,7 +80,6 @@ import Debug.Trace (traceM, trace)
 import qualified Language.PureScript as P
 import Control.Monad.State (State, modify, runState, MonadState(..))
 
-
 freshNameErl :: (MonadSupply m) => m T.Text
 freshNameErl = fmap (("_@" <>) . T.pack . show) fresh
 
@@ -385,9 +384,12 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
   arities :: M.Map (Qualified Ident) FnArity
   arities =
     -- max arities is max of actual impl and most saturated application
-    let actualArities = M.fromList $ map (\(x, n) -> (Qualified (Just mn) (Ident x), n)) foreignExports
-        inferredMaxArities = foldr findApps actualArities decls
-    in (explicitArities `M.union` ((\n -> Arity (0, n)) <$> inferredMaxArities))
+    let actualArities = M.fromList $ map (\(x, n) -> (Qualified (Just mn) (Ident x), Set.singleton n)) foreignExports
+        inferredArities = foldr findApps actualArities decls
+        inferredMaxArities = M.mapMaybe (\nn -> (\n -> Arity (0, n)) <$> Set.lookupMax nn) inferredArities
+    in 
+      -- trace (show (foldr findApps M.empty decls)) $
+        explicitArities `M.union` inferredMaxArities
 
   -- 're-export' foreign imports in the @ps module - also used for internal calls for non-exported foreign imports
   reExportForeign :: Ident -> m ([(Atom,Int)], [Erl], Maybe (Ident, (EType, ETypeEnv)))
@@ -480,51 +482,74 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
         etypeEnv = maybe M.empty snd translated
     
     let curried = ( [ (ident', 0) ], [ EFunctionDef (TFun [] <$> erlangType) ss ident' [] (outerWrapper erl) ] )
+
     -- For effective > 0 (either plain curried funs, FnX or EffectFnX) generate an uncurried overload
     -- f x y = ... -~~> f(X,Y) -> ((...)(X))(Y).
     -- Relying on inlining to clean up some junk here
     let mkRunApp modName prefix n = App eann (Var eann (Qualified (Just modName) (Ident $ prefix <> T.pack (show n))))
         applyStep fn a = App eann fn (Var eann (Qualified Nothing (Ident a)))
+       
+
+        countAbs :: Expr Ann -> Int
+        countAbs (Abs _ _ e) = 1 + countAbs e
+        countAbs _ = 0
+
+    let curriedWrappingUncurried arity = do 
+          vars <- replicateM arity freshNameErl
+          let app = EApp (EAtomLiteral ident') (EVar <$> vars)
+              callUncurriedErl = curriedLambda app vars
+          pure $ 
+            ( [ (ident', 0) ], [ EFunctionDef (TFun [] <$> erlangType) ss ident' [] callUncurriedErl ] )
+    let uncurriedWrappingCurried arity = do 
+          vars <- replicateM arity freshNameErl
+          let app = EApp (EAtomLiteral ident') []
+              callCurriederl = foldl (\e a -> EApp e [a]) app (EVar <$> vars)
+          pure $ 
+            ( [ (ident', arity) ], [ EFunctionDef (uncurryType arity =<< erlangType) ss ident' vars callCurriederl ] )
+
 
     -- Apply in CoreFn then translate to take advantage of translation of full/partial application
-    uncurried <- case effFnArity qident <|> fnArity qident <|> M.lookup qident arities of
+    (res1, res2) <- case effFnArity qident <|> fnArity qident <|> M.lookup qident arities of
       Just (EffFnXArity arity) -> do
         vars <- replicateM arity freshNameErl
         erl' <- valueToErl $ foldl applyStep (mkRunApp effectUncurried C.runEffectFn arity val) vars
-        pure ( [ (ident', arity) ], [ EFunctionDef (uncurryType arity =<< erlangType) ss ident' vars (outerWrapper (EApp erl' [])) ] )
+        pure $ curried <> ( [ (ident', arity) ], [ EFunctionDef (uncurryType arity =<< erlangType) ss ident' vars (outerWrapper (EApp erl' [])) ] )
 
       Just (FnXArity arity) -> do
         -- Same as above
         vars <- replicateM arity freshNameErl
         erl' <- valueToErl $ foldl applyStep (mkRunApp dataFunctionUncurried C.runFn arity val) vars
-        pure ( [ (ident', arity) ], [ EFunctionDef (uncurryType arity =<< erlangType) ss ident' vars (outerWrapper erl') ] )
+        pure $ curried <> ( [ (ident', arity) ], [ EFunctionDef (uncurryType arity =<< erlangType) ss ident' vars (outerWrapper erl') ] )
 
-      Just (Arity (n, m)) | n + m > 0 -> do
-        let arity = n+m
-        vars <- replicateM arity freshNameErl
-        erl' <- valueToErl $ foldl applyStep val vars
-        split <- if n == 0 || m == 0 then
-                  pure ([], [])
-                 else
-                  do
-                    erl'' <- valueToErl $ foldl applyStep val (take n vars)
-                    pure ( [ (ident', n) ], [ EFunctionDef Nothing ss ident' (take n vars) (outerWrapper erl'') ] )
-        let full = ( [ (ident', arity) ], [ EFunctionDef (uncurryType arity =<< erlangType) ss ident' vars (outerWrapper erl') ] )
-        pure $ split <> full
-      _ -> pure ([], [])
+      Just (Arity (n, m)) | n + m > 0 -> 
+        do
+          let arity = n+m
+          
+          -- experimental split between typeclass & regular arguments
+          -- TODO this still duplicates code
+          vars <- replicateM arity freshNameErl
+          split <- if n == 0 || m == 0 then
+                    pure ([], [])
+                   else
+                    do
+                      erl'' <- valueToErl $ foldl applyStep val (take n vars)
+                      pure ( [ (ident', n) ], [ EFunctionDef Nothing ss ident' (take n vars) (outerWrapper erl'') ] )
 
-    -- uncurried <- case effFnArity qident <|> fnArity qident <|> M.lookup qident arities of
-    --   Just arity | arity > 0 -> do
-    --     vars <- replicateM arity freshNameErl
-    --     -- Apply in CoreFn then translate to take advantage of translation of full/partial application
-    --     erl' <- valueToErl $ foldl (\fn a -> App eann fn (Var eann (Qualified Nothing (Ident a)))) (wrap val) vars
-    --     pure ( [ (ident', arity) ], [ EFunctionDef (uncurryType arity =<< erlangType) ss ident' vars (outerWrapper (unwrap erl')) ] )
-    --   _ -> pure ([], [])
+          if countAbs val == arity then do
+            erl' <- valueToErl $ foldl applyStep val vars
+            curriedWrap <- curriedWrappingUncurried arity
+            let uncurried = ( [ (ident', arity) ], [ EFunctionDef (uncurryType arity =<< erlangType) ss ident' vars (outerWrapper erl') ] )
 
-    let (res1, res2) = curried <> uncurried
+            pure $ uncurried <> curriedWrap <> split
+          else do
+            uncurriedWrap <- uncurriedWrappingCurried arity
+            pure $ curried <> uncurriedWrap  <> split
+
+      _ -> pure curried
     pure $ if ident `Set.member` declaredExportsSet
             then (res1, res2, etypeEnv)
             else ([], res2, etypeEnv)
+
 
   -- substitute any() for any var X, for use in specs
   replaceVars :: EType -> EType
@@ -687,11 +712,11 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
 
 
 
-  findApps :: Bind Ann -> M.Map (Qualified Ident) Int -> M.Map (Qualified Ident) Int
+  findApps :: Bind Ann -> M.Map (Qualified Ident) (Set Int) -> M.Map (Qualified Ident) (Set Int)
   findApps (NonRec _ _ val) apps = findApps' val apps
   findApps (Rec vals) apps = foldr findApps' apps $ map snd vals
 
-  findApps' :: Expr Ann -> M.Map (Qualified Ident) Int -> M.Map (Qualified Ident) Int
+  findApps' :: Expr Ann -> M.Map (Qualified Ident) (Set Int) -> M.Map (Qualified Ident) (Set Int)
   findApps' expr apps = case expr of
     e@App{} ->
       let (f, args) = unApp e []
@@ -704,7 +729,7 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
         Var (_, _, _, Just IsTypeClassConstructor) _ ->
           apps'
         Var _ qi@(Qualified (Just mn') _) | mn' == mn
-          -> M.alter (updateArity $ length args) qi apps'
+          -> M.insertWith Set.union qi (Set.singleton $ length args) apps'
         _ -> findApps' f apps'
     Accessor _ _ e -> findApps' e apps
     ObjectUpdate _ e es -> findApps' e $ foldr findApps' apps $ map snd es
@@ -714,9 +739,6 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
       findApps' e' $ foldr findApps'' apps b
     _ -> apps
     where
-      updateArity newArity old@(Just oldArity) | oldArity > newArity = old
-      updateArity newArity _ = Just newArity
-
       unApp :: Expr Ann -> [Expr Ann] -> (Expr Ann, [Expr Ann])
       unApp (App _ val arg) args = unApp val (arg : args)
       unApp other args = (other, args)
