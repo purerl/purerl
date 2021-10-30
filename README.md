@@ -16,13 +16,19 @@ Currently the `purerl` executable should correspond to `purs` compiler versions 
 
 | `purerl` version | `purs` version |
 | --- |  --- |
-| 0.0.12 | 0.14.4 |
+| 0.0.12-0.0.13 | 0.14.4 |
 | 0.0.11 | 0.14.3 |
 | 0.0.10 | 0.14.2 |
 | 0.0.9 | 0.14.1 |
 | 0.0.8 | 0.14.0 |
 | 0.0.7 | 0.13.8 |
 | 0.0.6 | 0.13.6 |
+
+# Installation
+
+Binaries are available for download on the [github releases](https://github.com/purerl/purerl/releases).
+
+A nix overlay is also available at [nixpkgs-purerl](https://github.com/purerl/nixpkgs-purerl/), with related packages available at [nixpkgs-purerl-support](https://github.com/id3as/nixpkgs-purerl-support) (or [easy-purescript-nix](https://github.com/justinwoo/easy-purescript-nix)).
 
 # Usage
 
