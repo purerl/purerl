@@ -44,7 +44,7 @@ The recommended usage is with `spago`, which now supports alternative backends. 
 and in `packages.dhall` include a `purerl`-specific package set, e.g.
 ```
 let upstream =
-      https://raw.githubusercontent.com/purerl/package-sets/erl-0.13.5-20191204/src/packages.dhall sha256:308bc2dd2c5700e6e22fae85b10472fd76ddaaf8034711ff0eaede145573479a
+      https://github.com/purerl/package-sets/releases/download/erl-0.14.4-20211012-1/packages.dhall
 ```
 
 Then 
