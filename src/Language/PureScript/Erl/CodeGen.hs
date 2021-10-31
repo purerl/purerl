@@ -130,6 +130,7 @@ erlDataMap :: ModuleName
 erlDataMap = ModuleName "Erl.Data.Map"
 
 data FnArity = EffFnXArity Int | FnXArity Int | Arity (Int, Int)
+  deriving (Eq, Show)
 type ETypeEnv = Map T.Text ([T.Text], EType)
 
 data Path
@@ -381,15 +382,19 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
   explicitArities :: M.Map (Qualified Ident) FnArity
   explicitArities = tyArity <$> types
 
+  actualForeignArities :: M.Map (Qualified Ident) Int
+  actualForeignArities = M.fromList $ map (\(x, n) -> (Qualified (Just mn) (Ident x), n)) foreignExports
+
   arities :: M.Map (Qualified Ident) FnArity
   arities =
     -- max arities is max of actual impl and most saturated application
-    let actualArities = M.fromList $ map (\(x, n) -> (Qualified (Just mn) (Ident x), Set.singleton n)) foreignExports
-        inferredArities = foldr findApps actualArities decls
+    let inferredArities = foldr findUsages (Set.singleton <$> actualForeignArities) decls
         inferredMaxArities = M.mapMaybe (\nn -> (\n -> Arity (0, n)) <$> Set.lookupMax nn) inferredArities
     in 
-      -- trace (show (foldr findApps M.empty decls)) $
-        explicitArities `M.union` inferredMaxArities
+      explicitArities `M.union` inferredMaxArities
+
+  usedArities :: M.Map (Qualified Ident) (Set Int)
+  usedArities = foldr findUsages M.empty decls
 
   -- 're-export' foreign imports in the @ps module - also used for internal calls for non-exported foreign imports
   reExportForeign :: Ident -> m ([(Atom,Int)], [Erl], Maybe (Ident, (EType, ETypeEnv)))
@@ -412,7 +417,7 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
     fident <- fmap (Ident . ("f" <>) . T.pack . show) fresh
     let var = Qualified Nothing fident
         wrap e = EBlock [ EVarBind (identToVar fident) fun, e ]
-    (idents, erl, _env) <- generateFunctionOverloads Nothing (ssAnn nullSourceSpan) ident (Atom Nothing $ runIdent ident) (Var (ssAnn nullSourceSpan) var) wrap
+    (idents, erl, _env) <- generateFunctionOverloads True Nothing (ssAnn nullSourceSpan) ident (Atom Nothing $ runIdent ident) (Var (ssAnn nullSourceSpan) var) wrap
     pure (idents, erl, (ident,) <$> ty)
 
   curriedLambda :: Erl -> [T.Text] -> Erl
@@ -469,10 +474,10 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
           _ -> Atom Nothing $ runIdent ident
 
 
-    generateFunctionOverloads (Just ss) eann ident ident' val id
+    generateFunctionOverloads False (Just ss) eann ident ident' val id
 
-  generateFunctionOverloads :: Maybe SourceSpan -> Ann -> Ident -> Atom -> Expr Ann -> (Erl -> Erl)  -> m ([(Atom,Int)], [ Erl ], ETypeEnv)
-  generateFunctionOverloads ss eann ident ident' val outerWrapper = do
+  generateFunctionOverloads :: Bool -> Maybe SourceSpan -> Ann -> Ident -> Atom -> Expr Ann -> (Erl -> Erl)  -> m ([(Atom,Int)], [ Erl ], ETypeEnv)
+  generateFunctionOverloads isForeign ss eann ident ident' val outerWrapper = do
     -- Always generate the plain curried form, f x y = ... -~~> f() -> fun (X) -> fun (Y) -> ... end end.
     let qident = Qualified (Just mn) ident
     erl <- valueToErl val
@@ -507,6 +512,17 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
           pure $ 
             ( [ (ident', arity) ], [ EFunctionDef (uncurryType arity =<< erlangType) ss ident' vars callCurriederl ] )
 
+    let guard :: Monoid a => Bool -> a -> a
+        guard t x = if t then x else mempty
+
+    let checkUsed :: (Set Int -> Bool) -> Bool
+        checkUsed f = 
+          ident `Set.member` declaredExportsSet || isForeign ||
+          maybe False f (M.lookup qident usedArities)
+          
+        usedArity a = checkUsed (Set.member a)
+        usedAnyArity = checkUsed (not . Set.null)
+        usedExceptArity a = checkUsed (not . Set.null . Set.delete a)
 
     -- Apply in CoreFn then translate to take advantage of translation of full/partial application
     (res1, res2) <- case effFnArity qident <|> fnArity qident <|> M.lookup qident arities of
@@ -535,17 +551,24 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
                       erl'' <- valueToErl $ foldl applyStep val (take n vars)
                       pure ( [ (ident', n) ], [ EFunctionDef Nothing ss ident' (take n vars) (outerWrapper erl'') ] )
 
-          if countAbs val == arity then do
+          
+          -- traceM $ show (qident, M.lookup qident usedArities)
+          if countAbs val == arity && usedArity arity then do
             erl' <- valueToErl $ foldl applyStep val vars
             curriedWrap <- curriedWrappingUncurried arity
             let uncurried = ( [ (ident', arity) ], [ EFunctionDef (uncurryType arity =<< erlangType) ss ident' vars (outerWrapper erl') ] )
-
-            pure $ uncurried <> curriedWrap <> split
-          else do
+            pure $ uncurried <> (guard (usedExceptArity arity) curriedWrap) <> split
+          else if usedAnyArity then do
             uncurriedWrap <- uncurriedWrappingCurried arity
-            pure $ curried <> uncurriedWrap  <> split
+            pure $ curried <> (guard (usedArity arity) uncurriedWrap)  <> split
+          else do
+            pure ([], [])
 
-      _ -> pure curried
+      _ ->
+        if usedAnyArity then 
+          pure curried
+        else 
+          pure mempty
     pure $ if ident `Set.member` declaredExportsSet
             then (res1, res2, etypeEnv)
             else ([], res2, etypeEnv)
@@ -712,43 +735,69 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
 
 
 
-  findApps :: Bind Ann -> M.Map (Qualified Ident) (Set Int) -> M.Map (Qualified Ident) (Set Int)
-  findApps (NonRec _ _ val) apps = findApps' val apps
-  findApps (Rec vals) apps = foldr findApps' apps $ map snd vals
+  findUsages :: Bind Ann -> M.Map (Qualified Ident) (Set Int) -> M.Map (Qualified Ident) (Set Int)
+  findUsages (NonRec _ _ val) apps = findUsages' val apps
+  findUsages (Rec vals) apps = foldr findUsages' apps $ map snd vals
 
-  findApps' :: Expr Ann -> M.Map (Qualified Ident) (Set Int) -> M.Map (Qualified Ident) (Set Int)
-  findApps' expr apps = case expr of
+  findUsages' :: Expr Ann -> M.Map (Qualified Ident) (Set Int) -> M.Map (Qualified Ident) (Set Int)
+  findUsages' expr apps = case expr of
     e@App{} ->
       let (f, args) = unApp e []
-          apps' = foldr findApps' apps args
+          apps' = foldr findUsages' apps args
       in
       case f of
         Var (_, _, _, Just IsNewtype) _ -> apps'
+        -- This is an app but we inline these
         Var (_, _, _, Just (IsConstructor _ fields)) (Qualified _ _) | length args == length fields ->
           apps'
         Var (_, _, _, Just IsTypeClassConstructor) _ ->
           apps'
+        -- Don't count fully saturated foreign import call, it will be called directly
+        Var _ _
+          | isFullySaturatedForeignCall f args ->
+          apps'
+
         Var _ qi@(Qualified (Just mn') _) | mn' == mn
           -> M.insertWith Set.union qi (Set.singleton $ length args) apps'
-        _ -> findApps' f apps'
-    Accessor _ _ e -> findApps' e apps
-    ObjectUpdate _ e es -> findApps' e $ foldr findApps' apps $ map snd es
-    Abs _ _ e -> findApps' e apps
-    Case _ e es -> foldr findApps' (foldr findAppsCase apps es) e
+        _ -> findUsages' f apps'
+    
+    v@Var{} ->
+      case v of
+        -- Must actually not assume this is 0 as it may be a ref fn/1 or fnx/efffnx/n
+        -- Should record separately - or assume that 0 may mean non-0 for this reason?
+        Var _ qi@(Qualified (Just mn') _) | mn' == mn
+          -> M.insertWith Set.union qi (Set.singleton 0) apps
+
+        _ -> apps
+
+    Accessor _ _ e -> findUsages' e apps
+    ObjectUpdate _ e es -> findUsages' e $ foldr findUsages' apps $ map snd es
+    Abs _ _ e -> findUsages' e apps
+    Case _ e es -> foldr findUsages' (foldr findUsagesCase apps es) e
     Let _ b e' ->
-      findApps' e' $ foldr findApps'' apps b
-    _ -> apps
+      findUsages' e' $ foldr findUsages'' apps b
+    
+    Literal _ litExpr -> case litExpr of
+      NumericLiteral _ -> apps
+      StringLiteral _ -> apps
+      CharLiteral _ -> apps
+      BooleanLiteral _ -> apps
+      ArrayLiteral exprs -> foldr findUsages' apps exprs
+      ObjectLiteral fields -> foldr findUsages' apps (map snd fields)
+
+    Constructor _ _ _ _ -> apps
+
     where
       unApp :: Expr Ann -> [Expr Ann] -> (Expr Ann, [Expr Ann])
       unApp (App _ val arg) args = unApp val (arg : args)
       unApp other args = (other, args)
 
-  findApps'' (NonRec _ _ e) apps = findApps' e apps
-  findApps'' (Rec binds) apps = foldr findApps' apps $ map snd binds
+  findUsages'' (NonRec _ _ e) apps = findUsages' e apps
+  findUsages'' (Rec binds) apps = foldr findUsages' apps $ map snd binds
 
 
-  findAppsCase (CaseAlternative _ (Right e)) apps = findApps' e apps
-  findAppsCase (CaseAlternative _ (Left ges)) apps = foldr findApps' apps $ map snd ges
+  findUsagesCase (CaseAlternative _ (Right e)) apps = findUsages' e apps
+  findUsagesCase (CaseAlternative _ (Left ges)) apps = foldr findUsages' apps $ concatMap (\(a, b) -> [a,b]) ges
 
 
   bindToErl :: Bind Ann -> m [Erl]
@@ -859,13 +908,8 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
         pure $ everywhereOnErl replaceQualifiedSelfCalls res
 
       -- fully saturated call to foreign import
-      Var _ qi@(Qualified (Just mn') ident)
-        | mn' == mn
-        , Just (Arity (a0, a1)) <- M.lookup qi arities
-        , let arity = a0+a1
-        , length args == arity
-        , Just expArity <- findExport $ runIdent ident
-        , expArity == arity
+      Var _ (Qualified _ ident)
+        | isFullySaturatedForeignCall f args
         -> return $ EApp (EAtomLiteral $ qualifiedToErl' mn ForeignModule ident) args'
 
       -- partially saturated application (all tc dicts to be applied in 1 call and maybe more to be applied to the curried result)
@@ -923,6 +967,15 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns decls) foreignExpo
   iife exprs = EApp (EFun0 Nothing (EBlock exprs)) []
 
   constructorLiteral name args = ETupleLiteral (EAtomLiteral (Atom Nothing (toAtomName name)) : args)
+
+  isFullySaturatedForeignCall :: Expr Ann -> [a] -> Bool
+  isFullySaturatedForeignCall var args = case var of
+    Var _ qi@(Qualified (Just mn') _)
+        | mn' == mn
+        , Just arity <- M.lookup qi actualForeignArities
+        , length args == arity
+        -> True
+    _ -> False
 
   curriedApp :: [Erl] -> Erl -> Erl
   curriedApp = flip (foldl (\fn a -> EApp fn [a]))
