@@ -114,6 +114,14 @@ erlDataList = "erl_data_list@ps"
 erlDataListTypes :: forall a. (IsString a) => a
 erlDataListTypes = "erl_data_list_types@ps"
 
+unsafeCoerceMod :: forall a. (IsString a) => a
+unsafeCoerceMod = "unsafe_coerce@ps"
+
+safeCoerceMod :: forall a. (IsString a) => a
+safeCoerceMod = "safe_coerce@ps"
+
+dataNewtype :: forall a. (IsString a) => a
+dataNewtype = "data_newtype@ps"
 
 atom :: forall a. (IsString a) => a
 atom = "atom"
@@ -145,3 +153,21 @@ euclideanRingInt = "euclideanRingNumber"
 
 semigroupList :: forall a. (IsString a) => a
 semigroupList = "semigroupList"
+
+unsafeCoerce :: forall a. (IsString a) => a
+unsafeCoerce = "unsafeCoerce"
+
+coerce :: forall a. (IsString a) => a
+coerce = "coerce"
+
+wrap :: forall a. (IsString a) => a
+wrap = "wrap"
+
+unwrap :: forall a. (IsString a) => a
+unwrap = "unwrap"
+
+over :: forall a. (IsString a) => a
+over = "over"
+
+over2 :: forall a. (IsString a) => a
+over2 = "over2"

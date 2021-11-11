@@ -27,9 +27,10 @@ import Language.PureScript.Erl.CodeGen.Optimizer.Common
 import qualified Language.PureScript.Constants.Prelude as C
 import qualified Language.PureScript.Erl.CodeGen.Constants as EC
 import Control.Monad.Supply.Class (MonadSupply)
-import Language.PureScript.Erl.CodeGen.Common (atomPS)
+import Language.PureScript.Erl.CodeGen.Common (atomPS, runAtom)
 
 import qualified Data.Map as Map
+import qualified Language.PureScript.Constants.Prim as C
 
 isEVar :: Erl -> Bool
 isEVar (EVar _) = True
@@ -170,6 +171,16 @@ inlineCommonOperators effectModule EC.EffectDictionaries{..} expander =
   , inlineErlAtom
 
   , unaryFn (effectModule, edFunctor) functorVoid id
+
+  , inlineNonClassUnaryFunction (EC.unsafeCoerceMod, EC.unsafeCoerce) id
+
+  , unaryUndefTCFn (EC.safeCoerceMod, EC.coerce) id
+  , unaryUndefTCFn (EC.dataNewtype, EC.unwrap) id
+  , unaryUndefTCFn (EC.dataNewtype, EC.wrap) id
+
+  , binaryUndefTC2Fn (EC.dataNewtype, EC.over) $ \_ x -> x
+  , binaryUndefTC2Fn (EC.dataNewtype, EC.over2) $ \_ x -> x
+
   , onNFn
   ]
 
@@ -183,6 +194,28 @@ inlineCommonOperators effectModule EC.EffectDictionaries{..} expander =
     convert (EApp (EApp fn [EApp dict' []]) [x]) | isFnName dicts dict' && isFnName fns fn = f x
     convert (EApp fn [EApp dict' [], x]) | isFnName dicts dict' && isFnName fns fn = f x
     convert other = other
+
+  unaryUndefTCFn :: (Text, PSString) -> (Erl -> Erl) -> Erl -> Erl
+  unaryUndefTCFn fns f = convert
+    where
+    convert :: Erl -> Erl
+    convert (EApp (expander -> EApp fn [undef]) [x]) | isUndef undef && isFnName fns fn = f x
+    convert (EApp fn [undef, x]) | isUndef undef && isFnName fns fn = f x
+    convert other = other
+
+    isUndef (EAtomLiteral atom) | runAtom atom == C.undefined = True
+    isUndef _ = False
+
+  binaryUndefTC2Fn :: (Text, PSString) -> (Erl -> Erl -> Erl) -> Erl -> Erl
+  binaryUndefTC2Fn fns f = convert
+    where
+    convert :: Erl -> Erl
+    convert (EApp (EApp (expander -> EApp fn [undef, undef']) [x]) [y]) | isUndef undef && isUndef undef' && isFnName fns fn = f x y
+    convert (EApp fn [undef, undef', x, y]) | isUndef undef && isUndef undef' && isFnName fns fn = f x y
+    convert other = other
+
+    isUndef (EAtomLiteral atom) | runAtom atom == C.undefined = True
+    isUndef _ = False
 
   inlineNonClassFunction :: (Text, Text) -> (Erl -> Erl -> Erl) -> Erl -> Erl
   inlineNonClassFunction modFn f = convert
