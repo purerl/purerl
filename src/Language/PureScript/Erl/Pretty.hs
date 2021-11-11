@@ -95,9 +95,17 @@ literals = mkPattern' match
     elts' <- traverse (\(x,ee) -> ((emit (runAtom x) <> emit "=>") <>) <$> prettyPrintErl' ee) elts
     return $ emit "(" <> e' <> emit ")" <> emit "#{" <> intercalate (emit ", ") elts' <> emit "}"
 
-  match (EArrayLiteral es) = mconcat <$> sequence
+  match (EListLiteral es) = mconcat <$> sequence
     [ return $ emit "["
     , intercalate (emit ", ") <$> mapM prettyPrintErl' es
+    , return $ emit "]"
+    ]
+
+  match (EListCons es e) = mconcat <$> sequence
+    [ return $ emit "["
+    , intercalate (emit ", ") <$> mapM prettyPrintErl' es
+    , return $ emit " | "
+    , prettyPrintErl' e
     , return $ emit "]"
     ]
 
@@ -194,7 +202,10 @@ literals = mkPattern' match
   match (EType name args ty) =
     return $ printTypeDef name args (Just ty)
 
-  match _ = mzero
+  -- Cases handled in operator table
+  match EUnary{} = mzero
+  match EBinary{} = mzero
+  match EApp{} = mzero
 
   printFunTy _ name (Just (TFun ts ty)) =
     emit $ "-spec " <> runAtom name <> "(" <> (T.intercalate "," $ printTy <$> ts) <> ") -> " <> printTy ty
@@ -319,6 +330,9 @@ prettyPrintErl' = A.runKleisli $ runPattern matchValue
         , binary    ShiftRight           "bsr"
         , binary    Or                   "or"
         , binary    XOr                  "xor"
+        ]
+      , [ binary    ListConcat           "++"
+        , binary    ListSubtract         "--"
         ]
       , [ binary    EqualTo              "=="
         , binary    NotEqualTo           "/="

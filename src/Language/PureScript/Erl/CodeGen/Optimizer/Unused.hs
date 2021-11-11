@@ -14,7 +14,6 @@ import Language.PureScript.Erl.CodeGen.AST
     ( Atom(Atom),
       Erl(EFunctionDef, EFunRef, EApp, EAtomLiteral),
       everything )
-import Debug.Trace (traceShow)
 import Protolude (mapMaybe)
 
 -- TODO not recognising external self-module calls, which should not be generated right now, who are we anyway
@@ -28,7 +27,7 @@ removeUnusedFuns exps = loop
               ) exps
 
   loop :: [Erl] -> [Erl]
-  loop asts = traceShow (changed, used) $ if changed then loop asts' else asts
+  loop asts = if changed then loop asts' else asts
     where
     used = expsSet <> foldMap (everything (<>)
             (\case

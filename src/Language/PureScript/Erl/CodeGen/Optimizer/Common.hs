@@ -15,8 +15,6 @@ import Control.Monad.Supply.Class (MonadSupply(..))
 import Control.Arrow (second)
 import qualified Data.Text as T
 
-
-
 isFn :: (Text, Text) -> Erl -> Bool
 isFn (moduleName, fnName) (EApp (EAtomLiteral (Atom (Just x) y)) []) =
   x == moduleName && y == fnName
@@ -107,7 +105,8 @@ replaceIdents vars = go where
   go (EMapLiteral binds) = f $ EMapLiteral $ map (second go) binds
   go (EMapPattern binds) = f $ EMapPattern $ map (second go) binds
   go (EMapUpdate e binds) = f $ EMapUpdate (go e) $ map (second go) binds
-  go (EArrayLiteral es) = f $ EArrayLiteral (map go es)
+  go (EListLiteral es) = f $ EListLiteral (map go es)
+  go (EListCons es e) = f $ EListCons (map go es) (go e)
   go v@(EVar var) = fromMaybe v $ lookup var vars
   go other = other
 

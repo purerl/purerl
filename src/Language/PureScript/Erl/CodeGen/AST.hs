@@ -83,9 +83,11 @@ data Erl
 
   | EMapUpdate Erl [(Atom,Erl)]
 
-  | ECaseOf Erl [(EBinder, Erl)]
+  | EListLiteral [Erl]
+  
+  | EListCons [Erl] Erl
 
-  | EArrayLiteral [Erl]
+  | ECaseOf Erl [(EBinder, Erl)]
   -- |
   -- Attribute including raw text between the parens
   --
@@ -93,7 +95,6 @@ data Erl
   -- Spec attribute
   | ESpec Atom EType
   | EType Atom [Text] EType
-  | EOpaque Atom [Text] EType
 
   deriving (Show, Eq)
 
@@ -259,6 +260,16 @@ data BinaryOperator
   -- Bitwise right shift
   --
   | ShiftRight
+  
+  -- |
+  -- List concatenation (++)
+  --
+  | ListConcat
+  -- |
+  -- List subtraction (--)
+  --
+  | ListSubtract
+
   deriving (Show, Eq)
 
 -- Simplified Erlang types
@@ -302,7 +313,9 @@ everywhereOnErl f = go
   go (EMapPattern binds) = f $ EMapPattern $ map (second go) binds
   go (EMapUpdate e binds) = f $ EMapUpdate (go e) $ map (second go) binds
   go (ECaseOf e binds) = f $ ECaseOf (go e) $ map (second go) binds
-  go (EArrayLiteral es) = f $ EArrayLiteral (map go es)
+  go (EListLiteral es) = f $ EListLiteral (map go es)
+  go (EListCons es e) = f $ EListCons (map go es) (go e)
+
   go other = f other
 
 everywhereOnErlTopDown :: (Erl -> Erl) -> Erl -> Erl
@@ -328,7 +341,8 @@ everywhereOnErlTopDownM f = f >=> go
   go (EMapPattern binds) = EMapPattern <$> fargs binds
   go (EMapUpdate e binds) = EMapUpdate <$> f' e <*> fargs binds
   go (ECaseOf e binds) = ECaseOf <$> f' e <*> fargs binds
-  go (EArrayLiteral es) = EArrayLiteral <$> traverse f' es
+  go (EListLiteral es) = EListLiteral <$> traverse f' es
+  go (EListCons es e) = EListCons <$> traverse f' es <*> f' e
   go other = f other
 
 -- Sorry. Really want a type that allows "child context" under binders etc
@@ -355,7 +369,8 @@ everywhereOnErlTopDownMThen f = f'
   go (EMapPattern binds) = EMapPattern <$> fargs binds
   go (EMapUpdate e binds) = EMapUpdate <$> f' e <*> fargs binds
   go (ECaseOf e binds) = ECaseOf <$> f' e <*> fargs binds
-  go (EArrayLiteral es) = EArrayLiteral <$> traverse f' es
+  go (EListLiteral es) = EListLiteral <$> traverse f' es
+  go (EListCons es e) = EListCons <$> traverse f' es <*> f' e
   go other = fst <$> f other
   
 everything :: forall r. (r -> r -> r) -> (Erl -> r) -> Erl -> r
@@ -374,5 +389,6 @@ everything (<>.) f = go
   go e0@(EMapPattern binds) = foldl (<>.) (f e0) (map (go . snd) binds)
   go e0@(EMapUpdate e binds) = foldl (<>.) (f e0 <>. go e) (map (go . snd) binds)
   go e0@(ECaseOf e binds) = foldl (<>.) (f e0 <>. go e) (map (go . snd) binds)
-  go e0@(EArrayLiteral es) = foldl (<>.) (f e0) (map go es)
+  go e0@(EListLiteral es) = foldl (<>.) (f e0) (map go es)
+  go e0@(EListCons es e) = foldl (<>.) (f e0) (map go $ es <> [e])
   go other = f other

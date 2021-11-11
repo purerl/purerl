@@ -25,7 +25,7 @@ import Language.PureScript.Erl.CodeGen.Optimizer.Inliner
       evaluateIifes,
       inlineCommonOperators,
       inlineCommonValues,
-      singleBegin )
+      singleBegin, collectLists )
 import Language.PureScript.Erl.CodeGen.Optimizer.Guards
     ( inlineSimpleGuards )
 
@@ -60,6 +60,7 @@ optimize exports es = removeUnusedFuns exports <$> traverse go es
     , pure . beginBinds
     , pure . evaluateIifes
     , pure . singleBegin
+    , pure . collectLists
     , etaConvert
     ]
 

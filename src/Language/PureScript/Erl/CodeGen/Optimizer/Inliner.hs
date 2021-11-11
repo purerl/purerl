@@ -8,6 +8,7 @@ module Language.PureScript.Erl.CodeGen.Optimizer.Inliner
   , etaConvert
   , singleBegin
   , beginBinds
+  , collectLists
   )
   where
 
@@ -116,6 +117,15 @@ evaluateIifes = everywhereOnErl convert
   convert (EFun1 Nothing x (EApp fun@EFunFull{} [EVar x'])) | x == x', not (occurs x fun) = fun
   convert e = e
 
+collectLists :: Erl -> Erl
+collectLists = everywhereOnErl go
+  where
+  go (EListCons xs (EListLiteral ys)) = EListLiteral (xs <> ys)
+  go (EListCons xs (EListCons ys z)) = EListCons (xs <> ys) z
+  go (EBinary ListConcat (EListLiteral xs) (EListLiteral ys)) = EListLiteral (xs <> ys)
+  go (EBinary ListConcat (EListLiteral xs) (EListCons ys z)) = EListCons (xs <> ys) z
+  go other = other
+
 inlineCommonValues :: (Erl -> Erl) -> Erl -> Erl
 inlineCommonValues expander = everywhereOnErl convert
   where
@@ -128,6 +138,12 @@ inlineCommonValues expander = everywhereOnErl convert
 
     | isDict boundedBoolean dict && isUncurriedFn fnBottom fn = EAtomLiteral $ Atom Nothing "false"
     | isDict boundedBoolean dict && isUncurriedFn fnTop    fn = EAtomLiteral $ Atom Nothing "true"
+
+  convert fn
+    | isFn (EC.dataUnit, EC.unit) fn = EAtomLiteral $ Atom Nothing "unit"
+    | isFn (EC.erlDataMap, EC.empty) fn = EMapLiteral []
+    | isFn (EC.erlDataListTypes, EC.nil) fn = EListLiteral []
+
   convert other = other
 
   fnZero = (EC.dataSemiring, C.zero)
@@ -147,6 +163,9 @@ inlineCommonOperators effectModule EC.EffectDictionaries{..} expander =
 
   , inlineNonClassFunction (EC.dataFunction, C.apply) $ \f x -> EApp f [x]
   , inlineNonClassFunction (EC.dataFunction, C.applyFlipped) $ \x f -> EApp f [x]
+  , inlineNonClassFunction (EC.erlDataListTypes, EC.cons) $ \x xs -> EListCons [x] xs
+  , inlineNonClassUnaryFunction (EC.erlDataListTypes, EC.null) $ \x -> EBinary EqualTo (EListLiteral []) x
+  , inlineNonClassUnaryFunction (EC.erlDataList, EC.singleton) $ \x -> EListLiteral [ x ]
 
   , inlineErlAtom
 
@@ -171,6 +190,14 @@ inlineCommonOperators effectModule EC.EffectDictionaries{..} expander =
     convert :: Erl -> Erl
     convert (EApp (EApp op' [x]) [y]) | isModFn modFn op' = f x y
     convert (EApp op' [x, y]) | isUncurriedFn' modFn op' = f x y
+    convert other = other
+
+  inlineNonClassUnaryFunction :: (Text, Text) -> (Erl -> Erl) -> Erl -> Erl
+  inlineNonClassUnaryFunction modFn f = convert
+    where
+    convert :: Erl -> Erl
+    convert (EApp op' [x]) | isModFn modFn op' = f x
+    convert (EApp op' [x]) | isUncurriedFn' modFn op' = f x
     convert other = other
 
   inlineErlAtom :: Erl -> Erl
@@ -276,6 +303,8 @@ binaryOperators = Map.fromList $ (\(Binary (dmod, dfn) (omod, ofn) result) -> ((
 
     , Binary heytingAlgebraBoolean opConj AndAlso
     , Binary heytingAlgebraBoolean opDisj OrElse
+
+    , Binary semigroupList opAppend ListConcat
     ]
     ++
       concatMap
@@ -370,6 +399,9 @@ boundedBoolean = (EC.dataBounded, C.boundedBoolean)
 heytingAlgebraBoolean :: forall a b. (IsString a, IsString b) => (a, b)
 heytingAlgebraBoolean = (EC.dataHeytingAlgebra, C.heytingAlgebraBoolean)
 
+semigroupList :: forall a b. (IsString a, IsString b) => (a, b)
+semigroupList = (EC.erlDataListTypes, EC.semigroupList )
+
 -- semigroupoidFn :: forall a b. (IsString a, IsString b) => (a, b)
 -- semigroupoidFn = (EC.controlSemigroupoid, C.semigroupoidFn)
 
@@ -397,8 +429,8 @@ opGreaterThan = (EC.dataOrd, C.greaterThan)
 opGreaterThanOrEq :: forall a b. (IsString a, IsString b) => (a, b)
 opGreaterThanOrEq = (EC.dataOrd, C.greaterThanOrEq)
 
--- opAppend :: forall a b. (IsString a, IsString b) => (a, b)
--- opAppend = (EC.dataSemigroup, C.append)
+opAppend :: forall a b. (IsString a, IsString b) => (a, b)
+opAppend = (EC.dataSemigroup, C.append)
 
 opSub :: forall a b. (IsString a, IsString b) => (a, b)
 opSub = (EC.dataRing, C.sub)

@@ -96,11 +96,24 @@ dataFunctionUncurried = "data_function_uncurried@ps"
 effectUncurried :: forall a. (IsString a) => a
 effectUncurried = "effect_uncurried@ps"
 
+dataUnit :: forall a. (IsString a) => a
+dataUnit = "data_unit@ps"
+
 dataIntBits :: forall a. (IsString a) => a
 dataIntBits = "data_int_bits@ps"
 
 erlAtom :: forall a. (IsString a) => a
 erlAtom = "erl_atom@ps"
+
+erlDataMap :: forall a. (IsString a) => a
+erlDataMap = "erl_data_map@ps"
+
+erlDataList :: forall a. (IsString a) => a
+erlDataList = "erl_data_list@ps"
+
+erlDataListTypes :: forall a. (IsString a) => a
+erlDataListTypes = "erl_data_list_types@ps"
+
 
 atom :: forall a. (IsString a) => a
 atom = "atom"
@@ -108,6 +121,27 @@ atom = "atom"
 void :: forall a. (IsString a) => a
 void = "void"
 
+unit :: forall a. (IsString a) => a
+unit = "unit"
+
+empty :: forall a. (IsString a) => a
+empty = "empty"
+
+nil :: forall a. (IsString a) => a
+nil = "nil"
+
+cons :: forall a. (IsString a) => a
+cons = "cons"
+
+null :: forall a. (IsString a) => a
+null = "null"
+
+singleton :: forall a. (IsString a) => a
+singleton = "singleton"
+
 
 euclideanRingInt :: forall a. (IsString a) => a
 euclideanRingInt = "euclideanRingNumber"
+
+semigroupList :: forall a. (IsString a) => a
+semigroupList = "semigroupList"
