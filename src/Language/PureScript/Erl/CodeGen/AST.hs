@@ -135,7 +135,7 @@ data Guard
 data Atom
   = Atom (Maybe Text) Text
   | AtomPS (Maybe Text) PSString
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 -- |
 -- Built-in unary operators
 --
@@ -358,3 +358,21 @@ everywhereOnErlTopDownMThen f = f'
   go (EArrayLiteral es) = EArrayLiteral <$> traverse f' es
   go other = fst <$> f other
   
+everything :: forall r. (r -> r -> r) -> (Erl -> r) -> Erl -> r
+everything (<>.) f = go
+  where
+  go :: Erl -> r
+  go e0@(EUnary _ e) = f e0 <>. go e
+  go e0@(EBinary _ e1 e2) = f e0 <>. go e1 <>. go e2
+  go e0@(EFunctionDef _ _ _ _ e) = f e0 <>. go e
+  go e0@(EVarBind _ e) = f e0 <>. go e
+  go e0@(EFunFull _ args) = foldl (<>.) (f e0) (map (go . snd) args)
+  go e0@(EApp e es) = foldl (<>.) (f e0 <>. go e) (map go es)
+  go e0@(EBlock es) = foldl (<>.) (f e0) (map go es)
+  go e0@(ETupleLiteral es) = foldl (<>.) (f e0) (map go es)
+  go e0@(EMapLiteral binds) = foldl (<>.) (f e0) (map (go . snd) binds)
+  go e0@(EMapPattern binds) = foldl (<>.) (f e0) (map (go . snd) binds)
+  go e0@(EMapUpdate e binds) = foldl (<>.) (f e0 <>. go e) (map (go . snd) binds)
+  go e0@(ECaseOf e binds) = foldl (<>.) (f e0 <>. go e) (map (go . snd) binds)
+  go e0@(EArrayLiteral es) = foldl (<>.) (f e0) (map go es)
+  go other = f other

@@ -12,34 +12,34 @@ packages:
   original:
     hackage: language-javascript-0.7.0.0
 - completed:
-    size: 715756
+    size: 718180
     subdir: lib/purescript-cst
-    url: https://github.com/purescript/purescript/archive/v0.14.4.tar.gz
+    url: https://github.com/purescript/purescript/archive/198dfcb63ec0c158a99839bb18c194a989274071.tar.gz
     name: purescript-cst
     version: 0.4.0.0
-    sha256: a4897f5de917bef6ad0e6af20940d02677c0e0edfb9f387e10ea22cacbdd7dc8
+    sha256: 71a22e69abab221f2d90a7f25b808336270ff55d25048dbfb05b0f6fc0c11e41
     pantry-tree:
       size: 3018
-      sha256: a198f12749b961597fdb815e8a7bfe1ee4855f2238bb030d7cbe2ec0edd8e058
+      sha256: edeb98738296f4d077d43c042d68272dc224d058057f9d38722e6b887a763b28
   original:
     subdir: lib/purescript-cst
-    url: https://github.com/purescript/purescript/archive/v0.14.4.tar.gz
+    url: https://github.com/purescript/purescript/archive/198dfcb63ec0c158a99839bb18c194a989274071.tar.gz
 - completed:
-    size: 715756
+    size: 718180
     subdir: .
-    url: https://github.com/purescript/purescript/archive/v0.14.4.tar.gz
+    url: https://github.com/purescript/purescript/archive/198dfcb63ec0c158a99839bb18c194a989274071.tar.gz
     name: purescript
-    version: 0.14.4
-    sha256: a4897f5de917bef6ad0e6af20940d02677c0e0edfb9f387e10ea22cacbdd7dc8
+    version: 0.14.5
+    sha256: 71a22e69abab221f2d90a7f25b808336270ff55d25048dbfb05b0f6fc0c11e41
     pantry-tree:
-      size: 126956
-      sha256: 662a4c32229f8fa14f18c94466061fa05d53d9779e656f929eb17b5b93385e6e
+      size: 127303
+      sha256: 50287f48f4c064528eb663eeb5cdc465201e4095131091ed25c130add5f7c193
   original:
     subdir: .
-    url: https://github.com/purescript/purescript/archive/v0.14.4.tar.gz
+    url: https://github.com/purescript/purescript/archive/198dfcb63ec0c158a99839bb18c194a989274071.tar.gz
 snapshots:
 - completed:
-    size: 565712
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/17/6.yaml
-    sha256: 4e5e581a709c88e3fe26a9ce8bf331435729bead762fb5c190064c6c5bb1b835
-  original: lts-17.6
+    size: 586286
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/18/15.yaml
+    sha256: 2c9cb11d7aa0656bf28672dcb2414ab21e3ba9ea83ca170c216b2c2fc7e55856
+  original: lts-18.15

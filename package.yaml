@@ -53,7 +53,7 @@ dependencies:
   - utf8-string
   - vector
 build-tools:
-  - happy
+  - happy:happy ==1.20.0
 
 library:
   source-dirs: src

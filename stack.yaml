@@ -1,11 +1,11 @@
-resolver: lts-17.6
+resolver: lts-18.15
 pvp-bounds: upper
 packages:
 - .
 extra-deps:
 - language-javascript-0.7.0.0
 - github: purescript/purescript
-  commit: v0.14.4
+  commit: 198dfcb63ec0c158a99839bb18c194a989274071
   subdirs:
     - lib/purescript-cst
     - '.'

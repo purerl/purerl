@@ -107,3 +107,7 @@ atom = "atom"
 
 void :: forall a. (IsString a) => a
 void = "void"
+
+
+euclideanRingInt :: forall a. (IsString a) => a
+euclideanRingInt = "euclideanRingNumber"

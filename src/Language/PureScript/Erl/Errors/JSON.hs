@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE CPP #-}
 
 module Language.PureScript.Erl.Errors.JSON where
 
@@ -39,9 +40,11 @@ data JSONResult = JSONResult
   , errors :: [JSONError]
   } deriving (Show, Eq)
 
+#ifndef __GHCIDE__
 $(A.deriveJSON A.defaultOptions ''ErrorPosition)
 $(A.deriveJSON A.defaultOptions ''JSONError)
 $(A.deriveJSON A.defaultOptions ''JSONResult)
+#endif
 
 toJSONErrors :: Bool -> E.Level -> MultipleErrors -> [JSONError]
 toJSONErrors verbose level = map (toJSONError verbose level) . E.runMultipleErrors
