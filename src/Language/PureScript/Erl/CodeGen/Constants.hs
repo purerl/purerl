@@ -165,6 +165,9 @@ euclideanRingInt = "euclideanRingNumber"
 semigroupList :: forall a. (IsString a) => a
 semigroupList = "semigroupList"
 
+discardUnit :: forall a. (IsString a) => a
+discardUnit = "discardUnit"
+
 unsafeCoerce :: forall a. (IsString a) => a
 unsafeCoerce = "unsafeCoerce"
 

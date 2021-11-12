@@ -136,5 +136,12 @@ renameBoundVars = (`evalStateT` []) . go where
   go (EBlock es) = EBlock <$> traverse go es
   go e = gets (`replaceIdents` e)
 
-
-
+collect :: Int -> Erl -> Erl
+collect n e = go e []
+  where
+  go :: Erl -> [Erl] -> Erl
+  go (EApp f x) acc | not (null x) =
+    case x <> acc of
+      args | length args >= n -> EApp f args
+      args -> go f args
+  go _other _acc = e

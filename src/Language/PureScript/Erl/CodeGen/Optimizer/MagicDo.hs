@@ -10,6 +10,7 @@ import Data.Text (Text)
 
 import Language.PureScript.Erl.CodeGen.AST
 import Language.PureScript.Erl.CodeGen.Optimizer.Common
+    ( isDict, isUncurriedFn, collect )
 import qualified Language.PureScript.Constants.Prelude as C
 import qualified Language.PureScript.Erl.CodeGen.Constants as EC
 
@@ -24,58 +25,46 @@ magicDo'' effectModule EC.EffectDictionaries{..} expander =
   fnName = "__do"
 
   convert :: Erl -> Erl
-  -- Desugar pure
-  convert (EApp pure'@(EApp _ [_, val]) []) | isPure pure' = val
-  -- same but curried
-  convert (EApp pure'@((EApp _dictApp [val])) []) | isPure pure' = val
+  convert appExp@EApp{} = case expander appExp of
 
-  -- Desugar discard
-  convert discard@(EApp _ [_, _, m, EFun1 Nothing _ e]) | isDiscard discard =
-    EFun0 (Just fnName) (EBlock (EApp m [] : [ EApp e [] ]))
-  -- same but curried
-  convert discard@(EApp( EApp _dictApp [m]) [EFun1 Nothing _ e]) | isDiscard discard =
-    EFun0 (Just fnName) (EBlock (EApp m [] : [ EApp e [] ]))
-  
-  -- Desugar bind to wildcard
-  convert bind'@(EApp _ [_, m, EFun1 Nothing "_" e]) | isBind bind' =
-    EFun0 (Just fnName) (EBlock (EApp m [] : [ EApp e [] ]))
-  -- same but curried
-  convert bind'@(EApp (EApp _dictApp [m]) [EFun1 Nothing "_" e]) | isBind bind' =
-    EFun0 (Just fnName) (EBlock (EApp m [] : [ EApp e [] ]))
+    -- Desugar pure
+    EApp (collect 2 -> EApp fn [dict, val]) [] | isPure fn dict -> val
 
-  -- Desugar bind
-  convert bind'@(EApp _ [_, m, EFun1 Nothing var e]) | isBind bind' =
-    EFun0 (Just fnName) (EBlock (EVarBind var (EApp m []) : [ EApp e [] ]))
-  -- same but curried
-  convert bind'@(EApp (EApp _dictApp [m]) [EFun1 Nothing var e]) | isBind bind' =
-    EFun0 (Just fnName) (EBlock (EVarBind var (EApp m []) : [ EApp e [] ]))
+    -- Desugar discard
+    (collect 4 -> EApp fn [dict1, dict2, m, EFun1 Nothing _ e]) | isDiscard fn dict1 dict2 ->
+      EFun0 (Just fnName) (EBlock (EApp m [] : [ EApp e [] ]))
+
+    -- Desugar bind to wildcard
+    (collect 3 -> EApp fn [dict, m, EFun1 Nothing "_" e]) | isBind fn dict ->
+      EFun0 (Just fnName) (EBlock (EApp m [] : [ EApp e [] ]))
+
+    -- Desugar bind
+    (collect 3 -> EApp fn [dict, m, EFun1 Nothing var e]) | isBind fn dict ->
+      EFun0 (Just fnName) (EBlock (EVarBind var (EApp m []) : [ EApp e [] ]))
+
+    _other -> appExp
 
   -- TODO Inline double applications?
+  -- what does that mean
   convert other = other
 
-  -- Check if an expression represents a monomorphic call to >>= for the Eff monad
-  isBind (EApp fn [dict, _, _]) | isDict (effectModule, edBindDict) dict && isBindPoly fn = True
-  isBind (EApp (EApp (expander -> EApp fn [dict]) [_]) [_]) | isDict (effectModule, edBindDict) dict && isBindPoly fn = True
-  isBind _ = False
+  isDiscard fn dict1 dict2 =
+    isDict (EC.controlBind, C.discardUnitDictionary) dict1 &&
+    isDict (effectModule, edBindDict) dict2 &&
+    isDiscardPoly fn
 
-  -- Check if an expression represents a call to @discard@
-  isDiscard (EApp fn [dict1, dict2, _, _])
-    | isDict (EC.controlBind, C.discardUnitDictionary) dict1 && 
-      isDict (effectModule, edBindDict) dict2 &&
-      isDiscardPoly fn = True
-  isDiscard (EApp (EApp (expander -> EApp fn [dict1, dict2]) [_]) [_])
-    | isDict (EC.controlBind, C.discardUnitDictionary) dict1 && 
-      isDict (effectModule, edBindDict) dict2 &&
-      isDiscardPoly fn = True
-  isDiscard _ = False
+-- Check if an expression represents a monomorphic call to >>= for the Eff monad
+  isBind fn dict = isDict (effectModule, edBindDict) dict && isBindPoly fn
 
   -- Check if an expression represents a monomorphic call to pure or return for the Eff applicative
-  isPure (EApp fn [dict, _]) | isDict (effectModule, edApplicativeDict) dict && isPurePoly fn = True
-  isPure (EApp (expander -> EApp fn [dict]) [_]) | isDict (effectModule, edApplicativeDict) dict && isPurePoly fn = True
-  isPure _ = False
+  isPure fn dict = isDict (effectModule, edApplicativeDict) dict && isPurePoly fn
+
   -- Check if an expression represents the polymorphic >>= function
-  isBindPoly = isUncurriedFn (EC.controlBind, C.bind)
+  isBindPoly = isUncurriedFn (EC.controlBind, C.bind) . unthunk
   -- Check if an expression represents the polymorphic pure or return function
-  isPurePoly = isUncurriedFn (EC.controlApplicative, C.pure')
+  isPurePoly = isUncurriedFn (EC.controlApplicative, C.pure') . unthunk
   -- Check if an expression represents the polymorphic discard function
-  isDiscardPoly = isUncurriedFn (EC.controlBind, C.discard)
+  isDiscardPoly = isUncurriedFn (EC.controlBind, C.discard) . unthunk
+
+  unthunk (EApp fn []) = fn
+  unthunk fn = fn

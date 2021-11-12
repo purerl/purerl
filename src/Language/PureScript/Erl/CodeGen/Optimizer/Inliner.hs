@@ -77,7 +77,6 @@ beginBinds = everywhereOnErl convert
     argVars = Set.fromList $ mapMaybe unEVar args
 
 
-
 -- (begin X1 = E1, ... Xn = En, F end)(X)
 -- to
 -- begin X1 = E1, ... Xn = En, F(X) end
@@ -183,6 +182,8 @@ inlineCommonOperators effectModule EC.EffectDictionaries{..} expander =
   , binaryUndefTC2Fn (EC.dataNewtype, EC.over) $ \_ x -> x
   , binaryUndefTC2Fn (EC.dataNewtype, EC.over2) $ \_ x -> x
 
+  , inlineDiscardUnit
+
   , onNFn
   ]
 
@@ -193,9 +194,9 @@ inlineCommonOperators effectModule EC.EffectDictionaries{..} expander =
 
     where
     convert :: Erl -> Erl
-    convert (EApp (EApp (EApp fn []) [EApp dict' []]) [x]) | isFnName dicts dict' && isFnName fns fn = f x
-    convert (EApp (EApp fn [EApp dict' []]) [x]) | isFnName dicts dict' && isFnName fns fn = f x
-    convert (EApp fn [EApp dict' [], x]) | isFnName dicts dict' && isFnName fns fn = f x
+    convert (EApp (EApp (EApp fn []) [dict]) [x]) | isDict dicts dict && isFnName fns fn = f x
+    convert (EApp (EApp fn [dict]) [x]) | isDict dicts dict && isFnName fns fn = f x
+    convert (EApp fn [dict, x]) | isFnName dicts dict && isFnName fns fn = f x
     convert other = other
 
   unaryUndefTCFn :: (Text, PSString) -> (Erl -> Erl) -> Erl -> Erl
@@ -248,6 +249,17 @@ inlineCommonOperators effectModule EC.EffectDictionaries{..} expander =
 
   isModFn :: (Text, Text) -> Erl -> Bool
   isModFn = isFn
+
+  inlineDiscardUnit :: Erl -> Erl
+  inlineDiscardUnit = go
+    where
+      go eApp@EApp{} = case eApp of
+          (collect 2 . expander -> EApp fn [dict1, dict2]) | isDict (EC.controlBind, EC.discardUnit) dict1 && isFn (EC.controlBind, C.discard) fn
+            -> EApp controlBindBind [ dict2 ]
+          _ -> eApp
+
+      go other = other
+      controlBindBind = EAtomLiteral (Atom (Just EC.controlBind) C.bind)
 
 binaryOps :: (Erl -> Erl) -> Erl -> Erl
 binaryOps expander = \case
