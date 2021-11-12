@@ -152,14 +152,15 @@ inlineCommonValues expander = everywhereOnErl convert
   fnBottom = (C.dataBounded, C.bottom)
   fnTop = (C.dataBounded, C.top)
 
-data Binary = Binary (Text, PSString) (Text, PSString) BinaryOperator
+data Binary
+  = Binary (Text, PSString) (Text, PSString) BinaryOperator
+  | BinaryFn (Text, PSString) (Text, PSString) (Erl -> Erl -> Erl)
 data Unary = Unary (Text, PSString) (Text, PSString) UnaryOperator
 
 inlineCommonOperators :: Text -> EC.EffectDictionaries -> (Erl -> Erl) -> Erl -> Erl
 inlineCommonOperators effectModule EC.EffectDictionaries{..} expander =
   everywhereOnErlTopDown $ applyAll
-  [
-    binaryOps expander
+  [ binaryOps expander
   , unaryOps expander
 
   , inlineNonClassFunction (EC.dataFunction, C.apply) $ \f x -> EApp f [x]
@@ -173,6 +174,7 @@ inlineCommonOperators effectModule EC.EffectDictionaries{..} expander =
   , unaryFn (effectModule, edFunctor) functorVoid id
 
   , inlineNonClassUnaryFunction (EC.unsafeCoerceMod, EC.unsafeCoerce) id
+  , inlineNonClassUnaryFunction (EC.dataInt, EC.toNumber) $ \x -> EApp erlangFloat [ x ]
 
   , unaryUndefTCFn (EC.safeCoerceMod, EC.coerce) id
   , unaryUndefTCFn (EC.dataNewtype, EC.unwrap) id
@@ -187,7 +189,8 @@ inlineCommonOperators effectModule EC.EffectDictionaries{..} expander =
   where
 
   unaryFn ::  (Text, PSString) -> (Text, PSString) -> (Erl -> Erl) -> Erl -> Erl
-  unaryFn dicts fns f = convert
+  unaryFn dicts fns f = convert 
+
     where
     convert :: Erl -> Erl
     convert (EApp (EApp (EApp fn []) [EApp dict' []]) [x]) | isFnName dicts dict' && isFnName fns fn = f x
@@ -250,17 +253,21 @@ binaryOps :: (Erl -> Erl) -> Erl -> Erl
 binaryOps expander = \case
   eapp@(EApp fn [dict, opArg1, opArg2])
     | Just op <- getOp fn dict
-    -> EBinary op opArg1 opArg2
+    -> res op opArg1 opArg2
     | otherwise
     -> eapp
 
   EApp (EApp (expander -> EApp fn [dict]) [opArg1]) [opArg2]
     | Just op <- getOp fn dict
-    -> EBinary op opArg1 opArg2
+    -> res op opArg1 opArg2
 
   other -> other
 
   where
+  res :: Either BinaryOperator (Erl -> Erl -> Erl) -> Erl -> Erl -> Erl
+  res (Left op) = EBinary op
+  res (Right f) = f
+
   getOp (EAtomLiteral (Atom (Just moduleName) fnName)) (EApp (EAtomLiteral (Atom (Just dictModuleName) dictName)) []) =
     Map.lookup ((dictModuleName, dictName), (moduleName, fnName)) binaryOperators
   getOp _ _ = Nothing
@@ -328,8 +335,8 @@ fnNs = Map.fromList $
   where
   name prefix n = atomPS $ mkString $ prefix <> T.pack (show n)
 
-binaryOperators :: Map.Map ((Text, Text), (Text, Text)) BinaryOperator
-binaryOperators = Map.fromList $ (\(Binary (dmod, dfn) (omod, ofn) result) -> (((dmod, atomPS dfn),(omod, atomPS ofn)), result)) <$>
+binaryOperators :: Map.Map ((Text, Text), (Text, Text)) (Either BinaryOperator (Erl -> Erl -> Erl))
+binaryOperators = Map.fromList $ conv <$>
   (
     [ Binary euclideanRingNumber opDiv FDivide
     , Binary euclideanRingInt opDiv IDivide
@@ -363,10 +370,15 @@ binaryOperators = Map.fromList $ (\(Binary (dmod, dfn) (omod, ofn) result) -> ((
         , Binary ord opLessThanOrEq LessThanOrEqualTo
         , Binary ord opGreaterThan GreaterThan
         , Binary ord opGreaterThanOrEq GreaterThanOrEqualTo
+        , BinaryFn ord opMin (\x y -> EApp erlangMin [ x, y ])
+        , BinaryFn ord opMax (\x y -> EApp erlangMax [ x, y ])
         ]
       )
       [ ordBoolean, ordChar, ordInt, ordNumber, ordString ]
   )
+  where
+  conv (Binary (dmod, dfn) (omod, ofn) result) = (((dmod, atomPS dfn),(omod, atomPS ofn)), Left result)
+  conv (BinaryFn (dmod, dfn) (omod, ofn) result) = (((dmod, atomPS dfn),(omod, atomPS ofn)), Right result)
 
 unaryOperators :: Map.Map ((Text, Text), (Text, Text)) UnaryOperator
 unaryOperators = Map.fromList $ (\(Unary (dmod, dfn) (omod, ofn) result) -> (((dmod, atomPS dfn),(omod, atomPS ofn)), result)) <$>
@@ -462,6 +474,12 @@ opGreaterThan = (EC.dataOrd, C.greaterThan)
 opGreaterThanOrEq :: forall a b. (IsString a, IsString b) => (a, b)
 opGreaterThanOrEq = (EC.dataOrd, C.greaterThanOrEq)
 
+opMin:: forall a b. (IsString a, IsString b) => (a, b)
+opMin = (EC.dataOrd, EC.min)
+
+opMax:: forall a b. (IsString a, IsString b) => (a, b)
+opMax = (EC.dataOrd, EC.max)
+
 opAppend :: forall a b. (IsString a, IsString b) => (a, b)
 opAppend = (EC.dataSemigroup, C.append)
 
@@ -485,3 +503,12 @@ opNot = (EC.dataHeytingAlgebra, C.not)
 
 functorVoid :: forall a b. (IsString a, IsString b) => (a, b)
 functorVoid = (EC.dataFunctor, EC.void)
+
+erlangMin :: Erl
+erlangMin = EAtomLiteral (Atom (Just "erlang") "min")
+
+erlangMax :: Erl
+erlangMax = EAtomLiteral (Atom (Just "erlang") "max")
+
+erlangFloat :: Erl
+erlangFloat = EAtomLiteral (Atom (Just "erlang") "float")

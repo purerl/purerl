@@ -99,6 +99,9 @@ effectUncurried = "effect_uncurried@ps"
 dataUnit :: forall a. (IsString a) => a
 dataUnit = "data_unit@ps"
 
+dataInt :: forall a. (IsString a) => a
+dataInt = "data_int@ps"
+
 dataIntBits :: forall a. (IsString a) => a
 dataIntBits = "data_int_bits@ps"
 
@@ -123,6 +126,9 @@ safeCoerceMod = "safe_coerce@ps"
 dataNewtype :: forall a. (IsString a) => a
 dataNewtype = "data_newtype@ps"
 
+toNumber :: forall a. (IsString a) => a
+toNumber = "toNumber"
+
 atom :: forall a. (IsString a) => a
 atom = "atom"
 
@@ -144,9 +150,14 @@ cons = "cons"
 null :: forall a. (IsString a) => a
 null = "null"
 
+min :: forall a. (IsString a) => a
+min = "min"
+
+max :: forall a. (IsString a) => a
+max = "max"
+
 singleton :: forall a. (IsString a) => a
 singleton = "singleton"
-
 
 euclideanRingInt :: forall a. (IsString a) => a
 euclideanRingInt = "euclideanRingNumber"

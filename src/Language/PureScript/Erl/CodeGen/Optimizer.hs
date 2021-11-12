@@ -31,7 +31,6 @@ import Language.PureScript.Erl.CodeGen.Optimizer.Guards
 
 import qualified Language.PureScript.Erl.CodeGen.Constants as EC
 import Language.PureScript.Erl.CodeGen.Optimizer.Unused (removeUnusedFuns)
-import Data.Text (Text)
 
 -- |
 -- Apply a series of optimizer passes to simplified Javascript code
