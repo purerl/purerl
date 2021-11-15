@@ -94,6 +94,6 @@ buildExpander = replaceAtoms . foldr go []
   
   replaceAtom updates = \case
     EApp (EAtomLiteral a) [] | Just e <- lookup a updates
-      -> e
-    EApp (EVar "?MEMOIZE") [ e ] -> e
+      -> replaceAtoms updates e
+    EApp (EVar "?MEMOIZE") [ e ] -> replaceAtoms updates e
     other -> other
