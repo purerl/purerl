@@ -12,7 +12,7 @@ import Prelude.Compat
 import Control.Monad.Supply.Class (MonadSupply)
 
 import Language.PureScript.Erl.CodeGen.AST
-    ( everywhereOnErl, Erl(EAtomLiteral, EVar, EFunctionDef, EApp), Atom )
+    ( everywhereOnErl, Erl(EAtomLiteral, EFunctionDef, EApp), Atom )
 import Language.PureScript.Erl.CodeGen.Optimizer.MagicDo
     ( magicDo )
 import Language.PureScript.Erl.CodeGen.Optimizer.Blocks
@@ -31,12 +31,14 @@ import Language.PureScript.Erl.CodeGen.Optimizer.Guards
 
 import qualified Language.PureScript.Erl.CodeGen.Constants as EC
 import Language.PureScript.Erl.CodeGen.Optimizer.Unused (removeUnusedFuns)
+import Data.Map (Map)
+import Language.PureScript.Erl.CodeGen.Optimizer.Memoize (addMemoizeAnnotations)
 
 -- |
 -- Apply a series of optimizer passes to simplified Javascript code
 --
-optimize :: MonadSupply m => [(Atom, Int)] ->[Erl] -> m [Erl]
-optimize exports es = removeUnusedFuns exports <$> traverse go es
+optimize :: MonadSupply m => [(Atom, Int)] -> Map Atom Int -> [Erl] -> m [Erl]
+optimize exports memoizable es = removeUnusedFuns exports <$> traverse go es
   where
   go erl =
    do
@@ -46,9 +48,10 @@ optimize exports es = removeUnusedFuns exports <$> traverse go es
       , inlineCommonOperators EC.effect EC.effectDictionaries expander
       ]
       ) erl
-    untilFixedPoint tidyUp
+    erl'' <- untilFixedPoint tidyUp
       =<< untilFixedPoint (return . magicDo expander) 
       erl'
+    pure $ addMemoizeAnnotations memoizable erl''
 
   expander = buildExpander es
 
@@ -85,7 +88,6 @@ buildExpander :: [Erl] -> Erl -> Erl
 buildExpander = replaceAtoms . foldr go []
   where
   go = \case
-    EFunctionDef _ _ name [] ( EApp (EVar "?MEMOIZE") [ e ] ) -> ((name, e) :)
     EFunctionDef _ _ name [] e -> ((name, e) :)
     
     _ -> id
@@ -95,5 +97,5 @@ buildExpander = replaceAtoms . foldr go []
   replaceAtom updates = \case
     EApp (EAtomLiteral a) [] | Just e <- lookup a updates
       -> replaceAtoms updates e
-    EApp (EVar "?MEMOIZE") [ e ] -> replaceAtoms updates e
     other -> other
+

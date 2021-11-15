@@ -153,7 +153,7 @@ moduleToErl :: forall m .
   => E.Environment
   -> Module Ann
   -> [(T.Text, Int)]
-  -> m ([(Atom, Int)], [Erl], [Erl], [Erl], [(Atom, Int)], [Erl])
+  -> m ([(Atom, Int)], [Erl], [Erl], [Erl], [(Atom, Int)], [Erl], Map Atom Int)
 moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns origDecls) foreignExports =
   rethrow (addHint (ErrorInModule mn)) $ do
     res <- traverse topBindToErl decls
@@ -177,8 +177,18 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns origDecls) foreign
     safeDecls <- concat <$> traverse typecheckWrapper erlDecls
 
     let safeExports = map (\(EFunctionDef _ _ fnName args _) -> (fnName, length args)) safeDecls
+        
+        memoizable = M.mapKeys qualifiedToErl
+                    $ M.mapMaybe (\case
+                                    Arity (n, _) | n > 0 -> Just n
+                                    _ -> Nothing) 
+                      arities
+        -- Var _ qi@(Qualified _ _)
+        -- | Just (Arity (n, _)) <- M.lookup qi arities
+        -- , length args >= n
+        -- , n > 0
 
-    return (exports, namedSpecs, foreignSpecs, attributes ++ erlDecls, safeExports, safeDecls)
+    return (exports, namedSpecs, foreignSpecs, attributes ++ erlDecls, safeExports, safeDecls, memoizable)
   where
 
   decls :: [Bind Ann]
@@ -950,15 +960,13 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns origDecls) foreign
         | Just (Arity (n, _)) <- M.lookup qi arities
         , length args >= n
         , n > 0
-        -> return $ curriedApp (drop n args') $ memoizeAnnotation $ EApp (EAtomLiteral (qualifiedToErl qi)) (take n args')
+        -> return $ curriedApp (drop n args') $ EApp (EAtomLiteral (qualifiedToErl qi)) (take n args')
 
       _ -> curriedApp args' <$> valueToErl f
     where
     unApp :: Expr Ann -> [Expr Ann] -> (Expr Ann, [Expr Ann])
     unApp (App _ val arg) args = unApp val (arg : args)
     unApp other args = (other, args)
-
-    memoizeAnnotation emem = EApp (EVar "?MEMOIZE") [ emem ]
 
   valueToErl' _ (Case _ values binders) = do
     vals <- mapM valueToErl values

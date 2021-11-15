@@ -72,10 +72,10 @@ buildActions outputDir foreigns usePrefix generateChecked =
       Nothing ->
         return []
 
-    (exports, typeDecls, foreignSpecs, rawErl, checkedExports, checkedRawErl) <- moduleToErl env m foreignExports
+    (exports, typeDecls, foreignSpecs, rawErl, checkedExports, checkedRawErl, memoizable) <- moduleToErl env m foreignExports
 
-    optimized <- optimize exports rawErl
-    checked <- optimize checkedExports checkedRawErl
+    optimized <- optimize exports memoizable rawErl
+    checked <- optimize checkedExports memoizable checkedRawErl
 
     dir <- lift $ makeIO "get file info: ." getCurrentDirectory
     let makeAbsFile file = dir </> file
