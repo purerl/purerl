@@ -69,7 +69,7 @@ data Erl
   -- |
   -- Block
   --
-  | EBlock [Erl]
+  | EBlock [Erl] -- Array should be nonempty
   -- |
   -- Tuple literal {a, 1, "C"}
   --

@@ -25,7 +25,7 @@ import Language.PureScript.Erl.CodeGen.Optimizer.Inliner
       evaluateIifes,
       inlineCommonOperators,
       inlineCommonValues,
-      singleBegin, collectLists )
+      singleBegin, collectLists, replaceAppliedFunRefs )
 import Language.PureScript.Erl.CodeGen.Optimizer.Guards
     ( inlineSimpleGuards )
 
@@ -62,6 +62,7 @@ optimize exports memoizable es = removeUnusedFuns exports <$> traverse go es
     , pure . beginBinds
     , pure . evaluateIifes
     , pure . singleBegin
+    , pure . replaceAppliedFunRefs
     , pure . collectLists
     , etaConvert
     ]
@@ -88,8 +89,7 @@ buildExpander :: [Erl] -> Erl -> Erl
 buildExpander = replaceAtoms . foldr go []
   where
   go = \case
-    EFunctionDef _ _ name [] e -> ((name, e) :)
-    
+    EFunctionDef _ _ name [] e@(EApp EAtomLiteral{} _)  -> ((name, e) :)
     _ -> id
   
   replaceAtoms updates = everywhereOnErl (replaceAtom updates)

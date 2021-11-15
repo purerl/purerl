@@ -9,6 +9,7 @@ module Language.PureScript.Erl.CodeGen.Optimizer.Inliner
   , singleBegin
   , beginBinds
   , collectLists
+  , replaceAppliedFunRefs
   )
   where
 
@@ -124,6 +125,13 @@ collectLists = everywhereOnErl go
   go (EListCons xs (EListCons ys z)) = EListCons (xs <> ys) z
   go (EBinary ListConcat (EListLiteral xs) (EListLiteral ys)) = EListLiteral (xs <> ys)
   go (EBinary ListConcat (EListLiteral xs) (EListCons ys z)) = EListCons (xs <> ys) z
+  go other = other
+
+replaceAppliedFunRefs :: Erl -> Erl
+replaceAppliedFunRefs = everywhereOnErl go
+  where
+  go (EApp (EFunRef name arity) args) | length args == arity
+    = EApp (EAtomLiteral name) args
   go other = other
 
 inlineCommonValues :: (Erl -> Erl) -> Erl -> Erl
