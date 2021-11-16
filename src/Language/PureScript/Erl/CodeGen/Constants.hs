@@ -117,6 +117,9 @@ erlDataList = "erl_data_list@ps"
 erlDataListTypes :: forall a. (IsString a) => a
 erlDataListTypes = "erl_data_list_types@ps"
 
+erlDataTuple :: forall a. (IsString a) => a
+erlDataTuple = "erl_data_tuple@ps"
+
 unsafeCoerceMod :: forall a. (IsString a) => a
 unsafeCoerceMod = "unsafe_coerce@ps"
 
@@ -185,3 +188,6 @@ over = "over"
 
 over2 :: forall a. (IsString a) => a
 over2 = "over2"
+
+tuple :: forall a. (IsString a) => a
+tuple = "tuple"

@@ -193,6 +193,7 @@ inlineCommonOperators effectModule EC.EffectDictionaries{..} expander =
   , inlineDiscardUnit
 
   , onNFn
+  , onTupleN
   ]
 
   where
@@ -326,17 +327,13 @@ onNFn = convert where
     | (EAtomLiteral (Atom (Just runMod) runFun)) <- runFnN
     , Just (RunFnN n res) <- Map.lookup (runMod, runFun) fnNs
     , length args == n
-    = res (normaliseRef n fn) args
+    = res fn args
   convert other = other
 
   collectArgs :: Int -> Int -> [Text] -> Erl -> Maybe ([Text], Erl)
   collectArgs n 1 acc (EFun1 Nothing arg e) | length acc == n - 1 = Just (reverse (arg : acc), e)
   collectArgs n m acc (EFun1 Nothing arg e) = collectArgs n (m - 1) (arg : acc) e
   collectArgs _ _ _   _ = Nothing
-
-  normaliseRef n (EFunRef _ arity) | arity /= n = error "Should never see wrong arity here"
-  normaliseRef _ (EFunRef fn _) = EAtomLiteral fn
-  normaliseRef _ other = other
 
 data FnNRes = MkFnN Int ([Text] -> Erl -> Erl) | RunFnN Int (Erl -> [Erl] -> Erl)
 
@@ -354,6 +351,24 @@ fnNs = Map.fromList $
   ]
   where
   name prefix n = atomPS $ mkString $ prefix <> T.pack (show n)
+
+onTupleN :: Erl -> Erl
+onTupleN = \case
+  EApp tupleN args
+    | (EAtomLiteral (Atom (Just tupleMod) tupleFn)) <- tupleN
+    , Just i <- Map.lookup (tupleMod, tupleFn) tupleNs
+    , length args == i
+    -> ETupleLiteral args
+  other -> other
+
+tupleNs :: Map.Map (Text, Text) Int
+tupleNs = Map.fromList $
+  [ fn i | i <- [0..10]
+  ]
+  where 
+  fn i = ( (EC.erlDataTuple, name EC.tuple i), i)
+  name prefix n = atomPS $ mkString $ prefix <> T.pack (show n)
+
 
 binaryOperators :: Map.Map ((Text, Text), (Text, Text)) (Either BinaryOperator (Erl -> Erl -> Erl))
 binaryOperators = Map.fromList $ conv <$>
