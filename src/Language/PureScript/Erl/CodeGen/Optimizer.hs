@@ -89,7 +89,7 @@ buildExpander :: [Erl] -> Erl -> Erl
 buildExpander = replaceAtoms . foldr go []
   where
   go = \case
-    EFunctionDef _ _ name [] e -> ((name, e) :)
+    EFunctionDef _ _ name [] e | isSimpleApp e  -> ((name, e) :)
     _ -> id
   
   replaceAtoms updates = everywhereOnErl (replaceAtom updates)
@@ -99,3 +99,7 @@ buildExpander = replaceAtoms . foldr go []
       -> replaceAtoms updates e
     other -> other
 
+  -- simple nested applications that look similar to floated synthetic apps
+  isSimpleApp (EApp e1 es) = isSimpleApp e1 && all isSimpleApp es
+  isSimpleApp (EAtomLiteral _) = True
+  isSimpleApp _ = False
