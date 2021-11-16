@@ -25,7 +25,7 @@ import Language.PureScript.Erl.CodeGen.Optimizer.Inliner
       evaluateIifes,
       inlineCommonOperators,
       inlineCommonValues,
-      singleBegin, collectLists, replaceAppliedFunRefs )
+      singleBegin, collectLists, replaceAppliedFunRefs, inlineCommonFnsM )
 import Language.PureScript.Erl.CodeGen.Optimizer.Guards
     ( inlineSimpleGuards )
 
@@ -33,6 +33,7 @@ import qualified Language.PureScript.Erl.CodeGen.Constants as EC
 import Language.PureScript.Erl.CodeGen.Optimizer.Unused (removeUnusedFuns)
 import Data.Map (Map)
 import Language.PureScript.Erl.CodeGen.Optimizer.Memoize (addMemoizeAnnotations)
+import Control.Monad ((<=<))
 
 -- |
 -- Apply a series of optimizer passes to simplified Javascript code
@@ -42,7 +43,7 @@ optimize exports memoizable es = removeUnusedFuns exports <$> traverse go es
   where
   go erl =
    do
-    erl' <- untilFixedPoint (tidyUp . applyAll
+    erl' <- untilFixedPoint (tidyUp <=< inlineCommonFnsM expander . applyAll
       [ 
         inlineCommonValues expander
       , inlineCommonOperators EC.effect EC.effectDictionaries expander

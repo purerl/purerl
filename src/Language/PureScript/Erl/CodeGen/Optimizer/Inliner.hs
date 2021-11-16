@@ -4,6 +4,7 @@
 module Language.PureScript.Erl.CodeGen.Optimizer.Inliner
   ( inlineCommonValues
   , inlineCommonOperators
+  , inlineCommonFnsM
   , evaluateIifes
   , etaConvert
   , singleBegin
@@ -27,7 +28,7 @@ import Language.PureScript.Erl.CodeGen.AST
 import Language.PureScript.Erl.CodeGen.Optimizer.Common
 import qualified Language.PureScript.Constants.Prelude as C
 import qualified Language.PureScript.Erl.CodeGen.Constants as EC
-import Control.Monad.Supply.Class (MonadSupply)
+import Control.Monad.Supply.Class (MonadSupply (fresh))
 import Language.PureScript.Erl.CodeGen.Common (atomPS, runAtom)
 
 import qualified Data.Map as Map
@@ -164,15 +165,63 @@ data Binary
   | BinaryFn (Text, PSString) (Text, PSString) (Erl -> Erl -> Erl)
 data Unary = Unary (Text, PSString) (Text, PSString) UnaryOperator
 
+inlineCommonFnsM :: forall m. (Monad m, MonadSupply m) => (Erl -> Erl) -> Erl -> m Erl
+inlineCommonFnsM _expander =
+  everywhereOnErlTopDownM $ applyAllM
+  [ inlineNonClassFunction3 (EC.dataMaybe, EC.maybe) $ \x f -> inlineMaybe x (\z -> EApp f [z])
+  , inlineNonClassFunction3 (EC.dataMaybe, EC.maybe') $ \fx f -> inlineMaybe (applyUnit fx) (\z -> EApp f [z])
+  , inlineNonClassFunction (EC.dataMaybe, EC.fromMaybe) $ \x -> inlineMaybe x id
+  , inlineNonClassFunction3 (EC.dataEither, EC.either) $ \l r -> inlineEither (\z -> EApp l [z]) (\z -> EApp r [z])
+  , inlineNonClassFunction (EC.dataEither, EC.fromLeft) $ \r -> inlineEither id (const r)
+  , inlineNonClassFunction (EC.dataEither, EC.fromRight) $ \l -> inlineEither (const l) id
+  ]
+  where
+
+  applyUnit (EFun1 _ x e) | not (occurs x e) =
+    e
+  applyUnit fx =
+    EApp fx [ EAtomLiteral $ Atom Nothing "unit" ]
+  
+  inlineEither l r e = do
+    n <- fresh
+    let var = EVar $ "_E" <> "@" <> T.pack (show n)
+
+    pure $ ECaseOf e [ (EBinder (ETupleLiteral [EAtomLiteral (Atom Nothing "left"), var]), l var)
+                     , (EBinder (ETupleLiteral [EAtomLiteral (Atom Nothing "right"), var]), r var)
+                     ]
+  inlineMaybe x f m = do
+    n <- fresh
+    let var = EVar $ "_J" <> "@" <> T.pack (show n)
+
+    pure $ ECaseOf m [ (EBinder (ETupleLiteral [EAtomLiteral (Atom Nothing "nothing")]), x)
+                     , (EBinder (ETupleLiteral [EAtomLiteral (Atom Nothing "just"), var]), f var)
+                     ]
+
+  inlineNonClassFunction3 :: (Text, Text) -> (Erl -> Erl -> Erl -> m Erl) -> Erl -> m Erl
+  inlineNonClassFunction3 modFn f = convert
+    where
+    convert :: Erl -> m Erl
+    convert (EApp (EApp (EApp op' [x]) [y]) [z]) | isFn modFn op' = f x y z
+    convert (EApp op' [x, y, z]) | isUncurriedFn' modFn op' = f x y z
+    convert other = pure other
+
+  inlineNonClassFunction :: (Text, Text) -> (Erl -> Erl -> m Erl) -> Erl -> m Erl
+  inlineNonClassFunction modFn f = convert
+    where
+    convert :: Erl -> m Erl
+    convert (EApp (EApp op' [x]) [y]) | isFn modFn op' = f x y
+    convert (EApp op' [x, y]) | isUncurriedFn' modFn op' = f x y
+    convert other = pure other
+
+
+
 inlineCommonOperators :: Text -> EC.EffectDictionaries -> (Erl -> Erl) -> Erl -> Erl
 inlineCommonOperators effectModule EC.EffectDictionaries{..} expander =
   everywhereOnErlTopDown $ applyAll
   [ binaryOps expander
   , unaryOps expander
 
-  , inlineNonClassFunction (EC.dataFunction, C.apply) $ \f x -> EApp f [x]
-  , inlineNonClassFunction (EC.dataFunction, C.applyFlipped) $ \x f -> EApp f [x]
-  , inlineNonClassFunction (EC.erlDataListTypes, EC.cons) $ \x xs -> EListCons [x] xs
+  , inlineNonClassFunction (EC.erlDataListTypes, EC.cons) $ \x xs -> EListCons [ x ] xs
   , inlineNonClassUnaryFunction (EC.erlDataListTypes, EC.null) $ \x -> EBinary EqualTo (EListLiteral []) x
   , inlineNonClassUnaryFunction (EC.erlDataList, EC.singleton) $ \x -> EListLiteral [ x ]
 

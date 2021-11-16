@@ -89,7 +89,6 @@ dataFunction = "data_function@ps"
 dataFunctor :: forall a. (IsString a) => a
 dataFunctor = "data_functor@ps"
 
-
 dataFunctionUncurried :: forall a. (IsString a) => a
 dataFunctionUncurried = "data_function_uncurried@ps"
 
@@ -128,6 +127,12 @@ safeCoerceMod = "safe_coerce@ps"
 
 dataNewtype :: forall a. (IsString a) => a
 dataNewtype = "data_newtype@ps"
+
+dataMaybe :: forall a. (IsString a) => a
+dataMaybe = "data_maybe@ps"
+
+dataEither :: forall a. (IsString a) => a
+dataEither = "data_either@ps"
 
 toNumber :: forall a. (IsString a) => a
 toNumber = "toNumber"
@@ -191,3 +196,21 @@ over2 = "over2"
 
 tuple :: forall a. (IsString a) => a
 tuple = "tuple"
+
+maybe :: forall a. (IsString a) => a
+maybe = "maybe"
+
+maybe' :: forall a. (IsString a) => a
+maybe' = "maybe'"
+
+fromMaybe :: forall a. (IsString a) => a
+fromMaybe = "fromMaybe"
+
+either :: forall a. (IsString a) => a
+either = "either"
+
+fromLeft :: forall a. (IsString a) => a
+fromLeft = "fromLeft"
+
+fromRight :: forall a. (IsString a) => a
+fromRight = "fromRight"
