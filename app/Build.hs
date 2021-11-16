@@ -49,6 +49,7 @@ import GHC.Generics (Generic)
 
 
 import Debug.Trace
+import Language.PureScript.Erl.CodeGen (buildCodegenEnvironment)
 
 data BuildOptions = BuildOptions
   { buildOutputDir    :: FilePath 
@@ -146,7 +147,7 @@ compile' BuildOptions{..} = do
         hPutStrLn stderr $ "Exiting due to externs error"
         exitFailure
 
-      let env = foldr P.applyExternsFileToEnvironment P.initEnvironment (catMaybes externsFiles)
+      let env = buildCodegenEnvironment $ foldr P.applyExternsFileToEnvironment P.initEnvironment (catMaybes externsFiles)
     
       res :: [Either P.ModuleName (CoreFn.Module CoreFn.Ann)]
           <- forM needToBuild \ModResult{ moduleName, coreFn } -> do

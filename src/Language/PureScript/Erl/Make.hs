@@ -31,7 +31,7 @@ import           Data.Time.Clock (UTCTime)
 import qualified Paths_purerl as Paths
 
 import           Language.PureScript.Erl.CodeGen.Common (erlModuleName, erlModuleNameBase, atomModuleName, atom, ModuleType(..), runAtom)
-import           Language.PureScript.Erl.CodeGen (moduleToErl)
+import           Language.PureScript.Erl.CodeGen (moduleToErl, CodegenEnvironment)
 import           Language.PureScript.Erl.CodeGen.Optimizer (optimize)
 import           Language.PureScript.Erl.Pretty (prettyPrintErl)
 import Language.PureScript.Erl.Errors ( errorMessage )
@@ -40,7 +40,7 @@ import Language.PureScript.Erl.Errors.Types
 import Data.Either (fromRight)
 
 data MakeActions m = MakeActions
-  { codegen :: P.Environment -> CF.Module CF.Ann -> SupplyT m ()
+  { codegen :: CodegenEnvironment -> CF.Module CF.Ann -> SupplyT m ()
   -- ^ Run the code generator for the module and write any required output files.
   , ffiCodegen :: CF.Module CF.Ann -> m ()
   , getOutputTimestamp :: P.ModuleName -> m (Maybe UTCTime)
@@ -60,7 +60,7 @@ buildActions outputDir foreigns usePrefix generateChecked =
     timestamps <- traverse getTimestampMaybe outputPaths
     pure $ fmap minimum . NEL.nonEmpty =<< sequence timestamps
 
-  codegen ::  P.Environment -> CF.Module CF.Ann -> SupplyT Make ()
+  codegen :: CodegenEnvironment -> CF.Module CF.Ann -> SupplyT Make ()
   codegen env m = do
     let mn = CF.moduleName m
     foreignExports <- lift $ case mn `M.lookup` foreigns of

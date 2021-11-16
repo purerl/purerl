@@ -5,6 +5,8 @@
 module Language.PureScript.Erl.CodeGen
   ( module AST
   , moduleToErl
+  , buildCodegenEnvironment
+  , CodegenEnvironment
   ) where
 
 import Prelude.Compat
@@ -86,6 +88,7 @@ import Language.PureScript.Erl.Synonyms ( replaceAllTypeSynonyms' )
 import Debug.Trace (traceM, trace)
 import qualified Language.PureScript as P
 import Control.Monad.State (State, modify, runState, MonadState(..))
+import Data.Either (fromRight)
 
 freshNameErl' :: (MonadSupply m) => T.Text -> m T.Text
 freshNameErl' base = fmap (((base <> "@") <>) . T.pack . show) fresh
@@ -144,17 +147,44 @@ data Path
   | PathRoot T.Text Int T.Text
   deriving (Show)
 
+data CodegenEnvironment = CodegenEnvironment E.Environment (M.Map (Qualified Ident) FnArity)
+
+buildCodegenEnvironment :: E.Environment -> CodegenEnvironment
+buildCodegenEnvironment env = CodegenEnvironment env explicitArities
+  where
+
+  tyArity :: SourceType -> FnArity
+  tyArity t = Arity $ go 0 t'
+    where
+    t' = fromRight t $ replaceAllTypeSynonyms' (E.typeSynonyms env) (E.types env) t
+
+    go n = \case
+      ConstrainedType _ _ ty -> go (n+1) ty
+      ForAll _ _ _ ty _ -> go n ty
+      other -> (n, go' other)
+    go' = \case
+      TypeApp _ (TypeApp _ fn _) ty | fn == E.tyFunction -> 1 + go' ty
+      ForAll _ _ _ ty _ -> go' ty
+      _ -> 0
+
+  explicitArities :: M.Map (Qualified Ident) FnArity
+  explicitArities = tyArity <$> types
+
+  types :: M.Map (Qualified Ident) SourceType
+  types = M.map (\(t, _, _) -> t) $ E.names env
+  ---- 
+
 -- |
 -- Generate code in the simplified Erlang intermediate representation for all declarations in a
 -- module.
 --
 moduleToErl :: forall m .
     (Monad m, MonadReader Options m, MonadSupply m, MonadError MultipleErrors m, MonadWriter MultipleErrors m)
-  => E.Environment
+  => CodegenEnvironment
   -> Module Ann
   -> [(T.Text, Int)]
   -> m ([(Atom, Int)], [Erl], [Erl], [Erl], [(Atom, Int)], [Erl], Map Atom Int)
-moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns origDecls) foreignExports =
+moduleToErl (CodegenEnvironment env explicitArities) (Module _ _ mn _ _ declaredExports _ foreigns origDecls) foreignExports =
   rethrow (addHint (ErrorInModule mn)) $ do
     res <- traverse topBindToErl decls
     reexports <- traverse reExportForeign foreigns
@@ -177,11 +207,11 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns origDecls) foreign
     safeDecls <- concat <$> traverse typecheckWrapper erlDecls
 
     let safeExports = map (\(EFunctionDef _ _ fnName args _) -> (fnName, length args)) safeDecls
-        
+
         memoizable = M.mapKeys qualifiedToErl
                     $ M.mapMaybe (\case
                                     Arity (n, _) | n > 0 -> Just n
-                                    _ -> Nothing) 
+                                    _ -> Nothing)
                       arities
         -- Var _ qi@(Qualified _ _)
         -- | Just (Arity (n, _)) <- M.lookup qi arities
@@ -389,22 +419,9 @@ moduleToErl env (Module _ _ mn _ _ declaredExports _ foreigns origDecls) foreign
   concatRes :: [([a], [b], ETypeEnv)] -> ([a], [b], ETypeEnv)
   concatRes x = (concatMap (\(a,_,_) -> a) x, concatMap (\(_, b, _) -> b) x, M.unions $ (\(_,_,c) -> c) <$> x)
 
-  tyArity :: SourceType -> FnArity
-  tyArity t = Arity $ go 0 t'
-    where
-    t' = either (const t) id $ replaceAllTypeSynonyms' (E.typeSynonyms env) (E.types env) t
 
-    go n = \case
-      ConstrainedType _ _ ty -> go (n+1) ty
-      ForAll _ _ _ ty _ -> go n ty
-      other -> (n, go' other)
-    go' = \case
-      TypeApp _ (TypeApp _ fn _) ty | fn == E.tyFunction -> 1 + go' ty
-      ForAll _ _ _ ty _ -> go' ty
-      _ -> 0
 
-  explicitArities :: M.Map (Qualified Ident) FnArity
-  explicitArities = tyArity <$> types
+  
 
   actualForeignArities :: M.Map (Qualified Ident) Int
   actualForeignArities = M.fromList $ map (\(x, n) -> (Qualified (Just mn) (Ident x), n)) foreignExports
