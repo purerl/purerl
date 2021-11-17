@@ -8,34 +8,55 @@ import           Prelude.Compat
 import           Protolude (ordNub)
 
 import           Control.Arrow ((&&&))
-import           Control.Monad
 import           Control.Monad.Error.Class (MonadError(..))
-import           Control.Monad.Trans.State.Lazy
-import           Control.Monad.Writer
+import Control.Monad.Trans.State.Lazy ( evalState, get )
+import Control.Monad.Writer
+    ( unless,
+      forM,
+      Last(Last, getLast),
+      censor,
+      MonadWriter(tell, listen) )
 import           Control.Exception (displayException)
 import           Data.Char (isSpace)
 import           Data.Either (partitionEithers)
 import           Data.Foldable (fold)
-import           Data.List (nubBy, partition, dropWhileEnd, sort, sortBy)
+import           Data.List (nubBy, partition, dropWhileEnd, sort, sortOn)
 import qualified Data.List.NonEmpty as NEL
 import           Data.Maybe (fromMaybe, mapMaybe)
 import qualified Data.Map as M
-import           Data.Ord (comparing)
 import qualified Data.Text as T
 import           Data.Text (Text)
 import           Language.PureScript.AST (ErrorMessageHint(..), HintCategory(..), DeclarationRef(..), ImportDeclarationType(..), Expr(..))
 import           Language.PureScript.AST.SourcePos
 import qualified Language.PureScript.Constants.Prim as C
-import           Language.PureScript.Crash
-import           Language.PureScript.Environment
+import Language.PureScript.Crash ( internalError )
+import Language.PureScript.Environment ( primSubName )
 import           Language.PureScript.Label (Label(..))
-import           Language.PureScript.Names
-import           Language.PureScript.Pretty
+import Language.PureScript.Names
+    ( ModuleName,
+      runIdent,
+      runModuleName,
+      showIdent,
+      showQualified,
+      ProperName(runProperName) )
+import Language.PureScript.Pretty
+    ( prettyPrintLabel,
+      typeAsBox,
+      typeAtomAsBox,
+      typeDiffAsBox,
+      prettyPrintValue )
 import           Language.PureScript.Errors (prettyPrintRef)
 import           Language.PureScript.Pretty.Common (endWith)
 import           Language.PureScript.PSString (decodeStringWithReplacement)
-import           Language.PureScript.Types
-import           Language.PureScript.Erl.Errors.Types
+import Language.PureScript.Types
+    ( Type(TypeConstructor, RCons, TypeLevelString, TypeApp),
+      eqType,
+      rowFromList,
+      rowToList,
+      Constraint(Constraint),
+      RowListItem(RowListItem) )
+import Language.PureScript.Erl.Errors.Types
+    ( ErrorMessage(..), SimpleErrorMessage(..) )
 import qualified System.Console.ANSI as ANSI
 import qualified Text.Parsec as P
 import qualified Text.Parsec.Error as PE
@@ -105,7 +126,7 @@ errorMessage'' sss err = MultipleErrors [ErrorMessage [PositionedError sss] err]
 -- | Create an error from multiple (possibly empty) source spans, reversed sorted.
 errorMessage''' :: [SourceSpan] -> SimpleErrorMessage -> MultipleErrors
 errorMessage''' sss err =
-  maybe (errorMessage err) (flip errorMessage'' err)
+  maybe (errorMessage err) (`errorMessage''` err)
     . NEL.nonEmpty
     . reverse
     . sort
@@ -214,16 +235,9 @@ prettyPrintSingleError (PPEOptions codeColor full _level _showDocs relPath) e = 
   prettyPrintErrorMessage :: TypeMap -> ErrorMessage -> Box.Box
   prettyPrintErrorMessage typeMap (ErrorMessage hints simple) =
     paras $
-      [ foldr renderHint (indent (renderSimpleErrorMessage simple)) hints
-      ] ++
+       foldr renderHint (indent (renderSimpleErrorMessage simple)) hints
+       :
       maybe [] (return . Box.moveDown 1) typeInformation
-      -- TODO: 
-      -- [ Box.moveDown 1 $ paras
-      --     [ line $ "See " <> errorDocUri e <> " for more information, "
-      --     , line $ "or to contribute content related to this " <> levelText <> "."
-      --     ]
-      -- | showDocs
-      -- ]
     where
     typeInformation :: Maybe Box.Box
     typeInformation | not (null types) = Just $ Box.hsep 1 Box.left [ line "where", paras types ]
@@ -261,14 +275,14 @@ prettyPrintSingleError (PPEOptions codeColor full _level _showDocs relPath) e = 
             ]
 
     renderSimpleErrorMessage (MissingFFIModule mn) =
-      line $ "The foreign module implementation for module " <> markCode (runModuleName mn) <> " is missing."            
+      line $ "The foreign module implementation for module " <> markCode (runModuleName mn) <> " is missing."
 
     renderSimpleErrorMessage (UnnecessaryFFIModule mn path) =
       paras [ line $ "An unnecessary foreign module implementation was provided for module " <> markCode (runModuleName mn) <> ": "
             , indent . lineS $ path
             , line $ "Module " <> markCode (runModuleName mn) <> " does not contain any foreign import declarations, so a foreign module is not necessary."
             ]
-    
+
     renderSimpleErrorMessage (MissingFFIImplementations mn idents) =
       paras [ line $ "The following values are not defined in the foreign module for module " <> markCode (runModuleName mn) <> ": "
             , indent . paras $ map (line . runIdent) idents
@@ -277,7 +291,7 @@ prettyPrintSingleError (PPEOptions codeColor full _level _showDocs relPath) e = 
       paras [ line $ "The following definitions in the foreign module for module " <> markCode (runModuleName mn) <> " are unused: "
             , indent . paras $ map (line . runIdent) idents
             ]
-            
+
 
     renderHint :: ErrorMessageHint -> Box.Box -> Box.Box
     renderHint (ErrorUnifyingTypes t1@RCons{} t2@RCons{}) detail =
@@ -438,7 +452,7 @@ prettyPrintSingleError (PPEOptions codeColor full _level _showDocs relPath) e = 
       paras
         [ detail
         , Box.moveUp 1 $ Box.moveRight 2 $ line $ "Solving this instance requires the newtype constructor " <> markCode (showQualified runProperName name) <> " to be in scope."
-        ]            
+        ]
     renderHint (PositionedError srcSpan) detail =
       paras [ line $ "at " <> displaySourceSpan relPath (NEL.head srcSpan)
             , detail
@@ -450,20 +464,20 @@ prettyPrintSingleError (PPEOptions codeColor full _level _showDocs relPath) e = 
     -- If both rows are not empty, print them as diffs
     -- If verbose print all rows else only print unique rows
     printRows :: Type a -> Type a -> (Box.Box, Box.Box)
-    printRows r1 r2 = case (full, r1, r2) of 
+    printRows r1 r2 = case (full, r1, r2) of
       (True, _ , _) -> (printRow typeAsBox r1, printRow typeAsBox r2)
 
-      (_, RCons{}, RCons{}) -> 
+      (_, RCons{}, RCons{}) ->
         let (sorted1, sorted2) = filterRows (rowToList r1) (rowToList r2)
         in (printRow typeDiffAsBox sorted1, printRow typeDiffAsBox sorted2)
-        
+
       (_, _, _) -> (printRow typeAsBox r1, printRow typeAsBox r2)
 
 
     -- Keep the unique labels only
     filterRows :: ([RowListItem a], Type a) -> ([RowListItem a], Type a) -> (Type a, Type a)
     filterRows (s1, r1) (s2, r2) =
-         let sort' = sortBy (comparing $ \(RowListItem _ name ty) -> (name, ty))
+         let sort' = sortOn (\(RowListItem _ name ty) -> (name, ty))
              notElem' s (RowListItem _ name ty) = all (\(RowListItem _ name' ty') -> name /= name' || not (eqType ty ty')) s
              unique1 = filter (notElem' s2) s1
              unique2 = filter (notElem' s1) s2

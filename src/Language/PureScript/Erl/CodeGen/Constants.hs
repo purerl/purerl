@@ -134,6 +134,8 @@ dataMaybe = "data_maybe@ps"
 dataEither :: forall a. (IsString a) => a
 dataEither = "data_either@ps"
 
+-- Value names
+
 toNumber :: forall a. (IsString a) => a
 toNumber = "toNumber"
 
@@ -166,15 +168,6 @@ max = "max"
 
 singleton :: forall a. (IsString a) => a
 singleton = "singleton"
-
-euclideanRingInt :: forall a. (IsString a) => a
-euclideanRingInt = "euclideanRingNumber"
-
-semigroupList :: forall a. (IsString a) => a
-semigroupList = "semigroupList"
-
-discardUnit :: forall a. (IsString a) => a
-discardUnit = "discardUnit"
 
 unsafeCoerce :: forall a. (IsString a) => a
 unsafeCoerce = "unsafeCoerce"
@@ -214,3 +207,14 @@ fromLeft = "fromLeft"
 
 fromRight :: forall a. (IsString a) => a
 fromRight = "fromRight"
+
+-- Typeclass Dictionary names
+
+euclideanRingInt :: forall a. (IsString a) => a
+euclideanRingInt = "euclideanRingNumber"
+
+semigroupList :: forall a. (IsString a) => a
+semigroupList = "semigroupList"
+
+discardUnit :: forall a. (IsString a) => a
+discardUnit = "discardUnit"

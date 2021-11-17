@@ -16,18 +16,24 @@ module Language.PureScript.Erl.CodeGen.Common
 , nameIsErlReserved
 , utf8Binary
 , encodeChar
+, freshNameErl
+, freshNameErl'
 ) where
 
 import Prelude.Compat hiding (all)
 import Data.Char
+    ( isDigit, isAlpha, isLower, toUpper, toLower, isLatin1 )
 import Data.Text (Text, uncons, cons, singleton, all, pack, singleton)
 import qualified Data.Text as T
 import Data.Word (Word16)
 import Language.PureScript.Names
+    ( ModuleName(..), Ident, runIdent )
 import Language.PureScript.PSString
-import Numeric
+    ( PSString(..), decodeStringEither )
+import Numeric ( showHex )
 
-import Language.PureScript.Erl.CodeGen.AST
+import Language.PureScript.Erl.CodeGen.AST ( Atom(..) )
+import Control.Monad.Supply.Class (MonadSupply (fresh))
 
 runAtom :: Atom -> Text
 runAtom at = case at of
@@ -183,3 +189,10 @@ erlAnyReserved = [
   "when",
   "xor"
   ]
+
+
+freshNameErl' :: (MonadSupply m) => T.Text -> m T.Text
+freshNameErl' base = fmap (((base <> "@") <>) . T.pack . show) fresh
+
+freshNameErl :: (MonadSupply m) => m T.Text
+freshNameErl = freshNameErl' "_"
