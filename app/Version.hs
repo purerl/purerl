@@ -8,14 +8,14 @@ import Prelude
 import Data.Version (showVersion)
 import Paths_purerl as Paths
 
-#ifndef RELEASE
+#if !(defined RELEASE) && !(defined __GHCIDE__)
 import qualified Development.GitRev as GitRev
 #endif
 
 versionString :: String
 versionString = showVersion Paths.version ++ extra
   where
-#ifdef RELEASE
+#if defined(RELEASE) || defined(__GHCIDE__)
   extra = ""
 #else
   extra = " [development build; commit: " ++ $(GitRev.gitHash) ++ dirty ++ "]"

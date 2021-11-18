@@ -14,6 +14,7 @@ module Language.PureScript.Erl.Make.Monad
   , writeJSONFile
   , copyFile
   , catchDoesNotExist
+  , hashFile
   ) where
 
 import           Prelude
@@ -44,6 +45,7 @@ import qualified System.Directory as Directory
 import           System.FilePath (takeDirectory)
 import           System.IO.Error (tryIOError, isDoesNotExistError)
 import           System.IO.UTF8 (readUTF8FileT)
+import qualified Language.PureScript.Make.Cache as Cache
 
 -- | A monad for running make actions
 newtype Make a = Make
@@ -125,10 +127,7 @@ catchDeserialiseFailure inner = do
 -- compiler.
 readExternsFile :: FilePath -> Make (Maybe ExternsFile)
 readExternsFile path = do
-  mexterns <- readCborFile path
-  return $ do
-    externs <- mexterns
-    return externs
+  readCborFile path
 
 -- | If the provided action threw an 'isDoesNotExist' error, catch it and
 -- return Nothing. Otherwise return Just the result of the inner action.
@@ -166,3 +165,7 @@ copyFile src dest =
 createParentDirectory :: FilePath -> IO ()
 createParentDirectory = createDirectoryIfMissing True . takeDirectory
 
+hashFile :: (MonadIO m, MonadError MultipleErrors m) => FilePath -> m Cache.ContentHash
+hashFile path = do
+  makeIO ("hash file: " <> Text.pack path)
+    (Cache.hash <$> B.readFile path)
