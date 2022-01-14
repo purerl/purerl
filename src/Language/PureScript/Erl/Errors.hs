@@ -286,6 +286,7 @@ prettyPrintSingleError (PPEOptions codeColor full _level _showDocs relPath) e = 
     renderSimpleErrorMessage (MissingFFIImplementations mn idents) =
       paras [ line $ "The following values are not defined in the foreign module for module " <> markCode (runModuleName mn) <> ": "
             , indent . paras $ map (line . runIdent) idents
+            , line $ "Hint: Are you sure the file has valid Erlang syntax? Did you use -compile(export_all), which isn't supported yet? Did you write -exports instead of -export?"
             ]
     renderSimpleErrorMessage (UnusedFFIImplementations mn idents) =
       paras [ line $ "The following definitions in the foreign module for module " <> markCode (runModuleName mn) <> " are unused: "
