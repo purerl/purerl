@@ -17,6 +17,7 @@ flags:
   haskeline:
     # Avoids a libtinfo dynamic library dependency
     terminfo: false
+    examples: false
   # Building on certain CentOS (maybe ghc) versions
   cryptonite:
     use_target_attributes: false
