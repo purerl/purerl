@@ -64,7 +64,7 @@ literals = mkPattern' match
       (Just SourceSpan { spanName = spanName, spanStart = spanStart }) -> 
         [ do 
             tf <- transformFilename <$> get
-            return $ emit $ "-file(\"" <> T.pack (tf spanName) <> "\", " <> T.pack (show $ sourcePosLine spanStart) <> ").\n"
+            return $ emit $ "%-file(\"" <> T.pack (tf spanName) <> "\", " <> T.pack (show $ sourcePosLine spanStart) <> ").\n"
         ]
       _ -> [])
     <>
