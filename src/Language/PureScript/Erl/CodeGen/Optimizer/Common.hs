@@ -126,8 +126,9 @@ renameBoundVars = (`evalStateT` []) . go
     go (EVarBind x e) = do
       n <- fresh
       let x' = x <> "@" <> T.pack (show n)
+      res <- gets (EVarBind x' . (`replaceIdents` e))
       modify ((x, EVar x') :)
-      gets (EVarBind x' . (`replaceIdents` e))
+      pure res
     go (EBlock es) = EBlock <$> traverse go es
     go e = gets (`replaceIdents` e)
 
