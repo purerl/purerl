@@ -20,7 +20,7 @@ import Control.Monad.Supply.Class (MonadSupply (fresh))
 import Control.Monad.Writer (MonadWriter (..))
 import Data.Bifunctor (Bifunctor (bimap))
 import Data.Either (fromRight)
-import Data.Foldable (find, traverse_)
+import Data.Foldable (find, traverse_, foldl')
 import Data.List (nub)
 import Data.Map (Map)
 import qualified Data.Map as M
@@ -825,19 +825,21 @@ moduleToErl (CodegenEnvironment env explicitArities) (Module _ _ mn _ _ declared
     curriedApp = flip (foldl (\fn a -> EApp fn [a]))
 
     literalToValueErl :: Literal (Expr Ann) -> m Erl
-    literalToValueErl = literalToValueErl' EMapLiteral valueToErl
+    literalToValueErl = fmap fst . literalToValueErl' EMapLiteral (\x -> (,[]) <$> valueToErl x)
 
-    literalToValueErl' :: ([(Atom, Erl)] -> Erl) -> (a -> m Erl) -> Literal a -> m Erl
-    literalToValueErl' _ _ (NumericLiteral n) = return $ ENumericLiteral n
-    literalToValueErl' _ _ (StringLiteral s) = return $ EStringLiteral s
-    literalToValueErl' _ _ (CharLiteral c) = return $ ECharLiteral c
-    literalToValueErl' _ _ (BooleanLiteral b) = return $ boolToAtom b
+    literalToValueErl' :: ([(Atom, Erl)] -> Erl) -> (a -> m (Erl, [b])) -> Literal a -> m (Erl, [b])
+    literalToValueErl' _ _ (NumericLiteral n) = pure (ENumericLiteral n, [])
+    literalToValueErl' _ _ (StringLiteral s) = pure (EStringLiteral s, [])
+    literalToValueErl' _ _ (CharLiteral c) = pure (ECharLiteral c , [])
+    literalToValueErl' _ _ (BooleanLiteral b) = pure (boolToAtom b, [])
     literalToValueErl' _ f (ArrayLiteral xs) = do
-      array <- EListLiteral <$> mapM f xs
-      pure $ EApp (EAtomLiteral $ Atom (Just "array") "from_list") [array]
+      args <- mapM f xs
+      let array = EListLiteral $ fst <$> args
+          binds = snd <$> args
+      pure (EApp (EAtomLiteral $ Atom (Just "array") "from_list") [array], concat binds)
     literalToValueErl' mapLiteral f (ObjectLiteral ps) = do
       pairs <- mapM (sndM f) ps
-      pure $ mapLiteral $ map (first (AtomPS Nothing)) pairs
+      pure (mapLiteral $ map (\(label, (e, _)) -> (AtomPS Nothing label, e)) pairs, concatMap (snd . snd) pairs)
 
     boolToAtom :: Bool -> Erl
     boolToAtom True = EAtomLiteral $ Atom Nothing "true"
@@ -875,16 +877,28 @@ moduleToErl (CodegenEnvironment env explicitArities) (Module _ _ mn _ _ declared
 
           let binders'' = map replaceBinderVars binders'
               (Case _ [] [CaseAlternative [] alt']) = replaceExpVars (Case (nullSourceSpan, [], Nothing, Nothing) [] [CaseAlternative [] alt])
-          -- alt' = replaceAltVars (zip vars newVars) (alt :: _)
-          b' <- mapM (binderToErl' vals) binders''
-          let (bs, erls) = second concat $ unzip b'
+
+          
+          (bs, binderContext) :: ([Erl], [((EFunBinder, [Erl]) -> Erl, (T.Text, Erl))]) <- second concat . unzip <$> mapM binderToErl' binders''
+          
+          -- binderContext is bindings required to make pattern matching work in binders, ie converting arrays to lists
+          -- let (binderBinds, binderVars) = map ($ EFunBinder bs Nothing) *** map (first EVar) $ unzip binderContext
+
+          let contextStep (binds, bindVars) (mkBind, otherContext) = 
+                (binds <> [ mkBind (EFunBinder (bs <> map snd bindVars) Nothing, vals ++ map fst bindVars) ], bindVars <> [ first EVar otherContext ])
+              (binderBinds, binderVars) = foldl' contextStep ([], []) binderContext
+
+
           (es, res) <- case alt' of
             Right e -> do
               e' <- valueToErl e
               pure ([], [(EFunBinder bs Nothing, e')])
-            Left guards -> first concat . unzip <$> mapM (guard bs) guards
-          pure (es ++ map ((\f -> f (EFunBinder bs Nothing)) . fst) erls, res, map (first EVar . snd) erls)
-        guard bs (ge, e) = do
+            Left guards -> first concat . unzip <$> mapM (guardToErl bs) guards
+
+          pure (es ++ binderBinds, res, binderVars)
+        
+        guardToErl :: [Erl] -> (Expr Ann, Expr Ann) -> m ([Erl], (EFunBinder, Erl))
+        guardToErl bs (ge, e) = do
           var <- freshNameErl
           ge' <- valueToErl ge
           let binder = EFunBinder bs Nothing
@@ -916,19 +930,20 @@ moduleToErl (CodegenEnvironment env explicitArities) (Module _ _ mn _ _ declared
     replaceBVars vars (NamedBinder a x b) = NamedBinder a (fromMaybe x $ lookup x vars) b
     replaceBVars _ z = z
 
-    binderToErl' :: [Erl] -> Binder Ann -> m (Erl, [(EFunBinder -> Erl, (T.Text, Erl))])
-    binderToErl' _ (NullBinder _) = pure (EVar "_", [])
-    binderToErl' _ (VarBinder _ ident) = pure (EVar $ identToVar ident, [])
-    binderToErl' vals (LiteralBinder _ (ArrayLiteral es)) = do
+    binderToErl' :: Binder Ann -> m (Erl, [((EFunBinder, [Erl]) -> Erl, (T.Text, Erl))])
+    binderToErl' (NullBinder _) = pure (EVar "_", [])
+    binderToErl' (VarBinder _ ident) = pure (EVar $ identToVar ident, [])
+    binderToErl' (LiteralBinder _ (ArrayLiteral es)) = do
       x <- freshNameErl
-      args' <- mapM (binderToErl' vals) es
+      args' <- mapM binderToErl' es
 
-      let cas binder =
+      let arrayToList = EAtomLiteral $ Atom (Just "array") "to_list"
+          cas (binder, vals) =
             EApp
               ( EFunFull
                   Nothing
-                  ( (binder, EApp (EAtomLiteral $ Atom (Just "array") "to_list") [EVar x]) :
-                      [(EFunBinder (replicate (length vals) (EVar "_")) Nothing, EAtomLiteral $ Atom Nothing "nil") | not (irrefutable binder)]
+                  ( (binder, EApp arrayToList [EVar x]) :
+                      [(EFunBinder (replicate (length vals) (EVar "_")) Nothing, EAtomLiteral $ Atom Nothing "fail") | not (irrefutable binder)]
                   )
               )
               vals
@@ -936,19 +951,20 @@ moduleToErl (CodegenEnvironment env explicitArities) (Module _ _ mn _ _ declared
 
       let arr = EListLiteral (map fst args')
       pure (EVar x, (EVarBind var . cas, (var, arr)) : concatMap snd args')
-    binderToErl' vals (LiteralBinder _ lit) = (,[]) <$> literalToValueErl' EMapPattern (fmap fst . binderToErl' vals) lit
-    binderToErl' vals (ConstructorBinder (_, _, _, Just IsNewtype) _ _ [b]) = binderToErl' vals b
-    binderToErl' vals (ConstructorBinder _ _ (Qualified _ (ProperName ctorName)) binders) = do
-      args' <- mapM (binderToErl' vals) binders
-      pure (constructorLiteral ctorName (map fst args'), concatMap snd args')
-    binderToErl' vals (NamedBinder _ ident binder) = do
-      (e, xs) <- binderToErl' vals binder
+    binderToErl' (LiteralBinder _ lit) = literalToValueErl' EMapPattern binderToErl' lit
+    binderToErl' (ConstructorBinder (_, _, _, Just IsNewtype) _ _ [b]) = binderToErl' b
+    binderToErl' (ConstructorBinder _ _ (Qualified _ (ProperName ctorName)) binders) = do
+        args' <- mapM binderToErl' binders
+        pure (constructorLiteral ctorName (map fst args'), concatMap snd args')
+    binderToErl' (NamedBinder _ ident binder) = do
+      (e, xs) <- binderToErl' binder
       pure (EVarBind (identToVar ident) e, xs)
 
-    irrefutable (EFunBinder bindEs Nothing) = all isVar bindEs
+    irrefutable (EFunBinder bindEs Nothing) = all isOk bindEs
       where
-        isVar (EVar _) = True
-        isVar _ = False
+        isOk (EVarBind _ e) = isOk e
+        isOk (EVar _) = True
+        isOk _ = False
     irrefutable _ = False
 
     removeDollars = fe
