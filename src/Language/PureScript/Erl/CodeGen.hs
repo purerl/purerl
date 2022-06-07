@@ -174,12 +174,11 @@ moduleToErl (CodegenEnvironment env explicitArities) (Module _ _ mn _ _ declared
   rethrow (addHint (ErrorInModule mn)) $ do
     res <- traverse topBindToErl decls
     reexports <- traverse reExportForeign foreigns
-    let exportTypes = mapMaybe (\(_, _, t) -> t) reexports
-        typeEnv = M.unions $ map (snd . snd) exportTypes
-        foreignSpecs = map (\(ident, (ty, _)) -> ESpec (qualifiedToErl' mn ForeignModule ident) (replaceVars ty)) exportTypes
+    let exportTypes = mapMaybe (\(_, _, t, _) -> t) reexports
+        foreignSpecs = map (\(ident, ty) -> ESpec (qualifiedToErl' mn ForeignModule ident) (replaceVars ty)) exportTypes
 
-        (exports, erlDecls, typeEnv') = concatRes $ res <> map (\(a, b, c) -> (a, b, maybe M.empty (snd . snd) c)) reexports
-        namedSpecs = map (\(name, (args, ty)) -> EType (Atom Nothing name) args ty) $ M.toList $ M.union typeEnv typeEnv'
+        (exports, erlDecls, typeEnv) = concatRes $ res <> map (\(a, b, _, d) -> (a, b, d)) reexports
+        namedSpecs = map (\(name, (args, ty)) -> EType (Atom Nothing name) args ty) $ M.toList typeEnv
 
     traverse_ checkExport foreigns
     let usedFfi = Set.fromList $ map runIdent foreigns
@@ -257,7 +256,7 @@ moduleToErl (CodegenEnvironment env explicitArities) (Module _ _ mn _ _ declared
     usedArities = foldr findUsages M.empty decls
 
     -- 're-export' foreign imports in the @ps module - also used for internal calls for non-exported foreign imports
-    reExportForeign :: Ident -> m ([(Atom, Int)], [Erl], Maybe (Ident, (EType, ETypeEnv)))
+    reExportForeign :: Ident -> m ([(Atom, Int)], [Erl], Maybe (Ident, EType), ETypeEnv)
     reExportForeign ident = do
       let arity = exportArity ident
           fullArity = case M.lookup (Qualified (Just mn) ident) arities of
@@ -266,8 +265,8 @@ moduleToErl (CodegenEnvironment env explicitArities) (Module _ _ mn _ _ declared
           wrapTy (ty', tenv) = case arity of
             0 -> Just (TFun [] ty', tenv)
             _ -> (,tenv) <$> uncurryType arity ty'
-          ty :: Maybe (EType, ETypeEnv)
-          ty = wrapTy . translateType =<< M.lookup (Qualified (Just mn) ident) types
+
+          ffiTyEnv = wrapTy . translateType =<< M.lookup (Qualified (Just mn) ident) types
 
       args <- replicateM fullArity freshNameErl
       let body = EApp (EAtomLiteral $ qualifiedToErl' mn ForeignModule ident) (take arity $ map EVar args)
@@ -276,8 +275,9 @@ moduleToErl (CodegenEnvironment env explicitArities) (Module _ _ mn _ _ declared
       fident <- fmap (Ident . ("f" <>) . T.pack . show) fresh
       let var = Qualified Nothing fident
           wrap e = EBlock [EVarBind (identToVar fident) fun, e]
-      (idents, erl, _env) <- generateFunctionOverloads True Nothing (ssAnn nullSourceSpan) ident (Atom Nothing $ runIdent ident) (Var (ssAnn nullSourceSpan) var) wrap
-      pure (idents, erl, (ident,) <$> ty)
+      (idents, erl, env) <- generateFunctionOverloads True Nothing (ssAnn nullSourceSpan) ident (Atom Nothing $ runIdent ident) (Var (ssAnn nullSourceSpan) var) wrap
+      let combinedTEnv = M.union env (maybe M.empty snd ffiTyEnv)
+      pure (idents, erl, (ident,) . fst <$> ffiTyEnv, combinedTEnv)
 
     curriedLambda :: Erl -> [T.Text] -> Erl
     curriedLambda = foldr (EFun1 Nothing)
