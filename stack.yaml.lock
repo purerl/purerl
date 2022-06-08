@@ -12,31 +12,45 @@ packages:
   original:
     hackage: language-javascript-0.7.0.0
 - completed:
-    size: 718180
+    size: 730731
     subdir: lib/purescript-cst
-    url: https://github.com/purescript/purescript/archive/198dfcb63ec0c158a99839bb18c194a989274071.tar.gz
+    url: https://github.com/purescript/purescript/archive/28f5f63cd231844ee5963889a8b1b06ebc8c4e71.tar.gz
     name: purescript-cst
-    version: 0.4.0.0
-    sha256: 71a22e69abab221f2d90a7f25b808336270ff55d25048dbfb05b0f6fc0c11e41
+    version: 0.5.0.0
+    sha256: 2483c4957f017a7d93a7145c10a1a06eba35734632ceb61715bb540d51f50506
     pantry-tree:
       size: 3018
-      sha256: edeb98738296f4d077d43c042d68272dc224d058057f9d38722e6b887a763b28
+      sha256: 6dadd34eb7952af78325f9a9af688cbc70f8151015a86220c9bff271c7a84a05
   original:
     subdir: lib/purescript-cst
-    url: https://github.com/purescript/purescript/archive/198dfcb63ec0c158a99839bb18c194a989274071.tar.gz
+    url: https://github.com/purescript/purescript/archive/28f5f63cd231844ee5963889a8b1b06ebc8c4e71.tar.gz
 - completed:
-    size: 718180
+    size: 730731
     subdir: .
-    url: https://github.com/purescript/purescript/archive/198dfcb63ec0c158a99839bb18c194a989274071.tar.gz
+    url: https://github.com/purescript/purescript/archive/28f5f63cd231844ee5963889a8b1b06ebc8c4e71.tar.gz
     name: purescript
-    version: 0.14.5
-    sha256: 71a22e69abab221f2d90a7f25b808336270ff55d25048dbfb05b0f6fc0c11e41
+    version: 0.14.9
+    sha256: 2483c4957f017a7d93a7145c10a1a06eba35734632ceb61715bb540d51f50506
     pantry-tree:
-      size: 127303
-      sha256: 50287f48f4c064528eb663eeb5cdc465201e4095131091ed25c130add5f7c193
+      size: 128705
+      sha256: ea4d36ca511ac8baf826669ad5c4684c1e17cc087ac2c81767da71eada725076
   original:
     subdir: .
-    url: https://github.com/purescript/purescript/archive/198dfcb63ec0c158a99839bb18c194a989274071.tar.gz
+    url: https://github.com/purescript/purescript/archive/28f5f63cd231844ee5963889a8b1b06ebc8c4e71.tar.gz
+- completed:
+    hackage: process-1.6.13.1@sha256:1fc2173110c0bf3274b1710c75af3f70ef6c90edafa56de7160992dec4ad4608,2845
+    pantry-tree:
+      size: 1543
+      sha256: 3eda8fd49887605c021ad0b6264fce21dde44250d639d81e6150d8a373e1feb2
+  original:
+    hackage: process-1.6.13.1
+- completed:
+    hackage: Cabal-3.2.1.0@sha256:8743076ec022296f9771d962000c9ca3a0fe02e68c37b992c63e382a675f791d,27482
+    pantry-tree:
+      size: 41224
+      sha256: 92682a2aab8d967de341acff88525376eb9a31f53f094e0878c51c2886564f3a
+  original:
+    hackage: Cabal-3.2.1.0
 snapshots:
 - completed:
     size: 586286

@@ -5,10 +5,14 @@ packages:
 extra-deps:
 - language-javascript-0.7.0.0
 - github: purescript/purescript
-  commit: 198dfcb63ec0c158a99839bb18c194a989274071
+  commit: 28f5f63cd231844ee5963889a8b1b06ebc8c4e71
   subdirs:
     - lib/purescript-cst
     - '.'
+# Fix issue with libtinfo.
+# See https://github.com/purescript/purescript/issues/4253
+- process-1.6.13.1
+- Cabal-3.2.1.0
 flags:
   aeson-pretty:
     lib-only: true
