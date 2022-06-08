@@ -146,8 +146,8 @@ inlineCommonValues expander = everywhereOnErl convert
 
     fnZero = (EC.dataSemiring, C.zero)
     fnOne = (EC.dataSemiring, C.one)
-    fnBottom = (C.dataBounded, C.bottom)
-    fnTop = (C.dataBounded, C.top)
+    fnBottom = (EC.dataBounded, C.bottom)
+    fnTop = (EC.dataBounded, C.top)
 
 data Binary
   = Binary (Text, PSString) (Text, PSString) BinaryOperator

@@ -5,14 +5,13 @@ packages:
 extra-deps:
 - language-javascript-0.7.0.0
 - github: purescript/purescript
-  commit: 28f5f63cd231844ee5963889a8b1b06ebc8c4e71
-  subdirs:
-    - lib/purescript-cst
-    - '.'
+  commit: 493867a9981526db771d1c4f6163296a1d497e23
 # Fix issue with libtinfo.
 # See https://github.com/purescript/purescript/issues/4253
 - process-1.6.13.1
 - Cabal-3.2.1.0
+# Not included in Stackage until the lts-19 series
+- monoidal-containers-0.6.2.0
 flags:
   aeson-pretty:
     lib-only: true

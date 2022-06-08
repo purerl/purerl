@@ -12,31 +12,16 @@ packages:
   original:
     hackage: language-javascript-0.7.0.0
 - completed:
-    size: 730731
-    subdir: lib/purescript-cst
-    url: https://github.com/purescript/purescript/archive/28f5f63cd231844ee5963889a8b1b06ebc8c4e71.tar.gz
-    name: purescript-cst
-    version: 0.5.0.0
-    sha256: 2483c4957f017a7d93a7145c10a1a06eba35734632ceb61715bb540d51f50506
-    pantry-tree:
-      size: 3018
-      sha256: 6dadd34eb7952af78325f9a9af688cbc70f8151015a86220c9bff271c7a84a05
-  original:
-    subdir: lib/purescript-cst
-    url: https://github.com/purescript/purescript/archive/28f5f63cd231844ee5963889a8b1b06ebc8c4e71.tar.gz
-- completed:
-    size: 730731
-    subdir: .
-    url: https://github.com/purescript/purescript/archive/28f5f63cd231844ee5963889a8b1b06ebc8c4e71.tar.gz
+    size: 761047
+    url: https://github.com/purescript/purescript/archive/493867a9981526db771d1c4f6163296a1d497e23.tar.gz
     name: purescript
-    version: 0.14.9
-    sha256: 2483c4957f017a7d93a7145c10a1a06eba35734632ceb61715bb540d51f50506
+    version: 0.15.2
+    sha256: 3bbe086295089aded698683b361164200dceb03b34fa9360dd11044fb5ef0e4e
     pantry-tree:
-      size: 128705
-      sha256: ea4d36ca511ac8baf826669ad5c4684c1e17cc087ac2c81767da71eada725076
+      size: 138490
+      sha256: c762c11a3a62e587d087f55ac82502a2694923a9e71b6757e52b50f8c10272b4
   original:
-    subdir: .
-    url: https://github.com/purescript/purescript/archive/28f5f63cd231844ee5963889a8b1b06ebc8c4e71.tar.gz
+    url: https://github.com/purescript/purescript/archive/493867a9981526db771d1c4f6163296a1d497e23.tar.gz
 - completed:
     hackage: process-1.6.13.1@sha256:1fc2173110c0bf3274b1710c75af3f70ef6c90edafa56de7160992dec4ad4608,2845
     pantry-tree:
@@ -51,6 +36,13 @@ packages:
       sha256: 92682a2aab8d967de341acff88525376eb9a31f53f094e0878c51c2886564f3a
   original:
     hackage: Cabal-3.2.1.0
+- completed:
+    hackage: monoidal-containers-0.6.2.0@sha256:97289baf716f22fdae04b4fcbee066453d2f4c630ef3f631aeeab61ee713841e,2309
+    pantry-tree:
+      size: 569
+      sha256: 55c0b7f60f8350546d437c9c0ad52c1dba35cac727972e7dc0f12201870df62f
+  original:
+    hackage: monoidal-containers-0.6.2.0
 snapshots:
 - completed:
     size: 586286

@@ -40,7 +40,6 @@ dependencies:
   - process
   - protolude
   - purescript
-  - purescript-cst
   - serialise
   - stm
   - text
