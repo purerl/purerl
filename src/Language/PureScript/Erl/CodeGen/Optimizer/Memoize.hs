@@ -6,18 +6,20 @@ where
 import Prelude
 
 import Language.PureScript.Erl.CodeGen.AST
-    ( Erl(..), Atom, everywhereOnErl )
-import Data.Map (Map)
-import Data.Map as Map ( lookup )
+    ( Erl(..), Atom, everywhereOnErl, pattern EApp, AppAnnotation (..) )
+import Data.Map as Map
 
 addMemoizeAnnotations :: Map Atom Int -> Erl -> Erl
-addMemoizeAnnotations memoizable = everywhereOnErl go
+addMemoizeAnnotations _memoizable = everywhereOnErl go
   where
   go e = case e of
-    EApp (EAtomLiteral f) args
-      | Just n <- Map.lookup f memoizable
-      , length args == n
+    EApp' SyntheticApp _ _
       -> memoizeAnnotation e
+    -- without using the annotation, but inferring things that seem to have fully applied tc args
+    -- EApp' _ (EAtomLiteral f) args
+    --   | Just n <- Map.lookup f memoizable
+    --   , length args == n
+    --   -> memoizeAnnotation e
     other -> other
 
 memoizeAnnotation :: Erl -> Erl

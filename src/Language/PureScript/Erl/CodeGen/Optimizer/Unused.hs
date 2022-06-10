@@ -9,8 +9,9 @@ import Data.Monoid (Any (..))
 import qualified Data.Set as S
 import Data.Text (Text)
 import Language.PureScript.Erl.CodeGen.AST
-  ( Atom (Atom),
-    Erl (EApp, EAtomLiteral, EFunRef, EFunctionDef),
+  ( Atom (..),
+    Erl (..),
+    pattern EApp,
     everything,
   )
 import Prelude.Compat

@@ -65,7 +65,7 @@ data Erl
   -- |
   -- Function application
   --
-  | EApp Erl [Erl]
+  | EApp' AppAnnotation Erl [Erl]
   -- |
   -- Block
   --
@@ -97,6 +97,14 @@ data Erl
   | EType Atom [Text] EType
 
   deriving (Show, Eq)
+
+data AppAnnotation 
+  = RegularApp
+  | SyntheticApp
+  deriving (Show, Eq)
+
+pattern EApp :: Erl -> [Erl] -> Erl
+pattern EApp e es = EApp' RegularApp e es
 
 -- | Simple 0-arity version of EFun1
 pattern EFun0 :: Maybe Text -> Erl -> Erl

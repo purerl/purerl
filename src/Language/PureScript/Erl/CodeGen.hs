@@ -12,7 +12,7 @@ where
 
 import Control.Applicative ((<|>))
 import Control.Arrow (first, second)
-import Control.Monad (foldM, replicateM, unless, when)
+import Control.Monad (foldM, replicateM, unless)
 import Control.Monad.Error.Class (MonadError (..))
 import Control.Monad.Reader (MonadReader (..))
 import Control.Monad.Supply.Class (MonadSupply (fresh))
@@ -27,7 +27,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import Data.Traversable (forM)
-import Debug.Trace (traceM, traceShow, trace, traceShowM)
+import Debug.Trace (traceM)
 import qualified Language.PureScript as P
 import Language.PureScript.AST (SourceSpan, nullSourceSpan)
 import qualified Language.PureScript.Constants.Prelude as C
@@ -39,7 +39,7 @@ import Language.PureScript.CoreFn
     CaseAlternative (CaseAlternative, caseAlternativeBinders),
     Expr (..),
     Literal (..),
-    Meta (IsConstructor, IsNewtype, IsTypeClassConstructor),
+    Meta (IsConstructor, IsNewtype, IsTypeClassConstructor, IsSyntheticApp),
     Module (Module),
     everywhereOnValues,
     extractAnn,
@@ -668,11 +668,13 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
       obj <- valueToErl o
       sts <- mapM (sndM valueToErl) ps
       return $ EMapUpdate obj (map (first (AtomPS Nothing)) sts)
-    valueToErl' _ e@App {} = do
+    valueToErl' _ e@(App (_, _, _, meta) _ _) = do
       let (f, args) = unApp e []
-
+          isSynthetic = case meta of
+                          Just IsSyntheticApp -> True
+                          _ -> False
       args' <- mapM valueToErl args
-      case f of
+      appResult <- case f of
         Var (_, _, _, Just IsNewtype) _ ->
           return $ head args'
         Var (_, _, _, Just (IsConstructor _ fields)) (Qualified _ ident)
@@ -703,6 +705,9 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
             n > 0 ->
             return $ curriedApp (drop n args') $ EApp (EAtomLiteral (qualifiedToErl mn qi)) (take n args')
         _ -> curriedApp args' <$> valueToErl f
+      pure $ case appResult of
+        EApp e es | isSynthetic -> EApp' SyntheticApp e es
+        _ -> appResult
       where
         unApp :: Expr Ann -> [Expr Ann] -> (Expr Ann, [Expr Ann])
         unApp (App _ val arg) args = unApp val (arg : args)
