@@ -39,7 +39,9 @@ import Control.Monad ((<=<))
 -- Apply a series of optimizer passes to simplified Javascript code
 --
 optimize :: MonadSupply m => [(Atom, Int)] -> Map Atom Int -> [Erl] -> m [Erl]
-optimize exports memoizable es = removeUnusedFuns exports <$> traverse go es
+optimize exports memoizable es = -- pure es
+  --  removeUnusedFuns exports <$> traverse go es
+  traverse go es
   where
   go erl =
    do

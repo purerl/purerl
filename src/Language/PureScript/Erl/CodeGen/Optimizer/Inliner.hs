@@ -229,7 +229,7 @@ inlineCommonOperators effectModule EC.EffectDictionaries {..} expander =
         binaryUndefTC2Fn (EC.dataNewtype, EC.over) $ \_ x -> x,
         binaryUndefTC2Fn (EC.dataNewtype, EC.over2) $ \_ x -> x,
         inlineDiscardUnit,
-        onNFn,
+        onNFn expander,
         onTupleN
       ]
   where
@@ -339,8 +339,8 @@ unaryOps expander = \case
       Map.lookup ((dictModuleName, dictName), (moduleName, fnName)) unaryOperators
     getOp _ _ = Nothing
 
-onNFn :: Erl -> Erl
-onNFn = convert
+onNFn :: (Erl -> Erl) -> Erl -> Erl
+onNFn expander = convert
   where
     convert (EApp mkFnN [EFun1 Nothing _ e])
       | (EAtomLiteral (Atom (Just mkMod) mkFun)) <- mkFnN,
@@ -351,7 +351,7 @@ onNFn = convert
         Just (MkFnN n res) <- Map.lookup (mkMod, mkFun) fnNs,
         Just (args, e) <- collectArgs n n [] fn =
         res args e
-    convert (EApp runFnN (fn : args))
+    convert (expander -> EApp runFnN (fn : args))
       | (EAtomLiteral (Atom (Just runMod) runFun)) <- runFnN,
         Just (RunFnN n res) <- Map.lookup (runMod, runFun) fnNs,
         length args == n =

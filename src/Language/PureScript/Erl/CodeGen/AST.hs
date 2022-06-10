@@ -116,6 +116,14 @@ pattern EFunN :: Maybe Text -> [Text] -> Erl -> Erl
 pattern EFunN name vars e <- EFunFull name [(EFunBinder (extractVars -> Just vars) Nothing, e)] where
   EFunN name vars e = EFunFull name [(EFunBinder (map EVar vars) Nothing, e)]
 
+
+curriedLambda :: Erl -> [Text] -> Erl
+curriedLambda = foldr (EFun1 Nothing)
+
+curriedApp :: [Erl] -> Erl -> Erl
+curriedApp = flip (foldl (\fn a -> EApp fn [a]))
+
+
 data EFunBinder
  = EFunBinder [Erl] (Maybe Guard)
 

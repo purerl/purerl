@@ -79,10 +79,10 @@ buildActions outputDir foreigns usePrefix generateChecked =
 
     dir <- lift $ makeIO "get file info: ." getCurrentDirectory
     let makeAbsFile file = dir </> file
-    let pretty = prettyPrintErl (makeAbsFile :: String -> String) optimized
-        prettyChecked = prettyPrintErl (makeAbsFile :: String -> String) checked
-        prettySpecs = prettyPrintErl (makeAbsFile :: String -> String) foreignSpecs
-        prettyDecls = prettyPrintErl (makeAbsFile :: String -> String) typeDecls
+    let pretty = prettyPrintErl makeAbsFile optimized
+        prettyChecked = prettyPrintErl makeAbsFile checked
+        prettySpecs = prettyPrintErl makeAbsFile foreignSpecs
+        prettyDecls = prettyPrintErl makeAbsFile typeDecls
         
     let 
         prefix :: [T.Text]

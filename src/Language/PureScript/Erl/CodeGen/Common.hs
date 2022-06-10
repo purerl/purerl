@@ -18,6 +18,7 @@ module Language.PureScript.Erl.CodeGen.Common
 , encodeChar
 , freshNameErl
 , freshNameErl'
+, runIdent'
 ) where
 
 import Prelude.Compat hiding (all)
@@ -27,7 +28,7 @@ import Data.Text (Text, uncons, cons, singleton, all, pack, singleton)
 import qualified Data.Text as T
 import Data.Word (Word16)
 import Language.PureScript.Names
-    ( ModuleName(..), Ident, runIdent )
+    ( ModuleName(..), Ident (InternalIdent), runIdent, InternalIdentData (RuntimeLazyFactory, Lazy) )
 import Language.PureScript.PSString
     ( PSString(..), decodeStringEither )
 import Numeric ( showHex )
@@ -146,12 +147,18 @@ toVarName v = case uncons v of
       | otherwise = "V@1" <> replaceChar x
 
 identToAtomName :: Ident -> Text
-identToAtomName = toAtomName . runIdent
+identToAtomName = toAtomName . runIdent'
 
 identToVar :: Ident -> Text
-identToVar = toVarName . runIdent
+identToVar = toVarName . runIdent'
 
-
+runIdent' :: Ident -> Text
+runIdent' = \case
+  InternalIdent RuntimeLazyFactory -> "@runtime_lazy"
+  InternalIdent (Lazy name) -> "_@lazy@" <> name
+  -- TODO may be prettier to directly munge these
+  other -> runIdent other
+  
 -- |
 -- Checks whether an identifier name is reserved in Erlang.
 --

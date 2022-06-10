@@ -12,16 +12,16 @@ packages:
   original:
     hackage: language-javascript-0.7.0.0
 - completed:
-    size: 761047
-    url: https://github.com/purescript/purescript/archive/493867a9981526db771d1c4f6163296a1d497e23.tar.gz
+    size: 774868
+    url: https://github.com/purescript/purescript/archive/e4c98bb3e1829862ba0c9c0cec5e82c360ce4d9d.tar.gz
     name: purescript
     version: 0.15.2
-    sha256: 3bbe086295089aded698683b361164200dceb03b34fa9360dd11044fb5ef0e4e
+    sha256: 68f69f59274223e65cae384b82787c62f1b52936eb139a77aebb7e582413f445
     pantry-tree:
-      size: 138490
-      sha256: c762c11a3a62e587d087f55ac82502a2694923a9e71b6757e52b50f8c10272b4
+      size: 141205
+      sha256: a359d9a273231c0b0ffe565d724d5f759dc8dabd1ad5577196026e3f1e0cf12c
   original:
-    url: https://github.com/purescript/purescript/archive/493867a9981526db771d1c4f6163296a1d497e23.tar.gz
+    url: https://github.com/purescript/purescript/archive/e4c98bb3e1829862ba0c9c0cec5e82c360ce4d9d.tar.gz
 - completed:
     hackage: process-1.6.13.1@sha256:1fc2173110c0bf3274b1710c75af3f70ef6c90edafa56de7160992dec4ad4608,2845
     pantry-tree:
