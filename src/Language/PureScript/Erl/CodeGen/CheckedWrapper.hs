@@ -31,7 +31,7 @@ typecheckWrapper mn =
 
             typeError path thing =
               ( EBinder (EVar "_"),
-                EApp
+                EApp RegularApp
                   (EAtomLiteral (Atom (Just "erlang") "error"))
                   [EStringLiteral $ "purerl runtime ffi type error: " <> pathToPSString path <> " " <> thing]
               )
@@ -41,7 +41,7 @@ typecheckWrapper mn =
                     if binderVar == checkVar
                       then EVar "_"
                       else binderVar
-               in (EGuardedBinder binderVar' (Guard (EApp (EAtomLiteral (Atom (Just "erlang") check)) [checkVar])), EAtomLiteral (Atom Nothing "typecheck"))
+               in (EGuardedBinder binderVar' (Guard (EApp RegularApp (EAtomLiteral (Atom (Just "erlang") check)) [checkVar])), EAtomLiteral (Atom Nothing "typecheck"))
 
             -- try to reuse bound names if possible
             maybeFreshVar x@(EVar _) = pure x
@@ -105,9 +105,9 @@ typecheckWrapper mn =
                       pure $
                         Just
                           [ ECaseOf
-                              (EApp (EAtomLiteral (Atom (Just "array") "is_array")) [bindName])
+                              (EApp RegularApp (EAtomLiteral (Atom (Just "array") "is_array")) [bindName])
                               [ ( EBinder (EAtomLiteral (Atom Nothing "true")),
-                                  EApp
+                                  EApp RegularApp
                                     (EAtomLiteral (Atom (Just "array") "map"))
                                     [ EFunFull
                                         Nothing
@@ -152,7 +152,7 @@ typecheckWrapper mn =
                                             ( Guard
                                                 ( EBinary
                                                     EqualTo
-                                                    (EApp (EAtomLiteral (Atom (Just "erlang") "map_size")) [argName])
+                                                    (EApp RegularApp (EAtomLiteral (Atom (Just "erlang") "map_size")) [argName])
                                                     (ENumericLiteral (Left (fromIntegral (length aePairs))))
                                                 )
                                             ),
@@ -176,7 +176,7 @@ typecheckWrapper mn =
               [ EFunctionDef (Just t) sourceSpan fnName argNames $
                   EBlock $
                     targs
-                      <> [EApp (EAtomLiteral $ Atom (Just $ atomModuleName mn PureScriptModule) fnNameRaw) (map EVar argNames)]
+                      <> [EApp RegularApp (EAtomLiteral $ Atom (Just $ atomModuleName mn PureScriptModule) fnNameRaw) (map EVar argNames)]
               ]
     _ ->
       pure []

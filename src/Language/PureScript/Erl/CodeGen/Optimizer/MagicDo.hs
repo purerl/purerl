@@ -31,31 +31,31 @@ magicDo'' effectModule EC.EffectDictionaries {..} expander =
     convert :: Erl -> Erl
     convert appExp@EApp {} = case expander appExp of
       -- Desugar pure
-      EApp (collect 2 -> EApp fn [dict, val]) [] | isPure fn dict -> val
+      EApp _ (collect 2 -> EApp _ fn [dict, val]) [] | isPure fn dict -> val
       -- Desugar discard
-      (collect 4 -> EApp fn [dict1, dict2, m, EFun1 Nothing _ e])
+      (collect 4 -> EApp _ fn [dict1, dict2, m, EFun1 Nothing _ e])
         | isDiscard fn dict1 dict2 ->
-          EFun0 (Just fnName) (EBlock (EApp m [] : [EApp e []]))
+          EFun0 (Just fnName) (EBlock (EApp RegularApp m [] : [EApp RegularApp e []]))
       -- Desugar bind to wildcard
-      (collect 3 -> EApp fn [dict, m, EFun1 Nothing "_" e])
+      (collect 3 -> EApp _ fn [dict, m, EFun1 Nothing "_" e])
         | isBind fn dict ->
-          EFun0 (Just fnName) (EBlock (EApp m [] : [EApp e []]))
+          EFun0 (Just fnName) (EBlock (EApp RegularApp m [] : [EApp RegularApp e []]))
       -- Desugar bind
-      (collect 3 -> EApp fn [dict, m, EFun1 Nothing var e])
+      (collect 3 -> EApp _ fn [dict, m, EFun1 Nothing var e])
         | isBind fn dict ->
-          EFun0 (Just fnName) (EBlock (EVarBind var (EApp m []) : [EApp e []]))
+          EFun0 (Just fnName) (EBlock (EVarBind var (EApp RegularApp m []) : [EApp RegularApp e []]))
       -- Desugar map
-      EApp (collect 3 -> EApp fn [dict, f, m]) []
+      EApp _ (collect 3 -> EApp _ fn [dict, f, m]) []
         | isMap fn dict ->
-          EApp f [EApp m []]
+          EApp RegularApp f [EApp RegularApp m []]
       -- Push application under case
-      EApp (ECaseOf ec binds) [] ->
-        ECaseOf ec $ map (second (`EApp` [])) binds
+      EApp _ (ECaseOf ec binds) [] ->
+        ECaseOf ec $ map (second (flip (EApp RegularApp) [])) binds
       -- Push application under block
-      EApp (EBlock es) []
+      EApp _ (EBlock es) []
         | Just (es', e) <- unsnoc es,
           all isVarBind es' ->
-          EBlock (es' <> [EApp e []])
+          EBlock (es' <> [EApp RegularApp e []])
       _other -> appExp
 
     -- TODO Inline double applications?
@@ -89,7 +89,7 @@ magicDo'' effectModule EC.EffectDictionaries {..} expander =
     -- Check if an expression represents the polymorphic map function
     isMapPoly = isUncurriedFn (EC.dataFunctor, C.map) . unthunk
 
-    unthunk (EApp fn []) = fn
+    unthunk (EApp _ fn []) = fn
     unthunk fn = fn
 
     isVarBind (EVarBind _ _) = True

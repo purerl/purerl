@@ -205,7 +205,7 @@ literals = mkPattern' match
   -- Cases handled in operator table
   match EUnary{} = mzero
   match EBinary{} = mzero
-  match EApp'{} = mzero
+  match EApp{} = mzero
 
   printFunTy _ name (Just (TFun ts ty)) =
     emit $ "-spec " <> runAtom name <> "(" <> (T.intercalate "," $ printTy <$> ts) <> ") -> " <> printTy ty
@@ -262,7 +262,7 @@ prettyPrintStringErl s = "<<" <> utf8Binary s <> ">>"
 app :: (Emit gen) => Pattern PrinterState Erl (gen, Erl)
 app = mkPattern' match
   where
-  match (EApp' _ val args) = do
+  match (EApp _ val args) = do
     jss <- traverse prettyPrintErl' args
     return (intercalate (emit ", ") jss, val)
   match _ = mzero

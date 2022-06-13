@@ -19,6 +19,8 @@ import Protolude (mapMaybe)
 
 -- TODO not recognising external self-module calls, which should not be generated right now, who are we anyway
 
+-- TODO not recognising fns only used in top-lvl floated synthetic apps reachable from other code
+
 removeUnusedFuns :: [(Atom, Int)] -> [Erl] -> [Erl]
 removeUnusedFuns exps = loop
   where
@@ -41,7 +43,7 @@ removeUnusedFuns exps = loop
                   (<>)
                   ( \case
                       EFunRef (Atom Nothing name) n -> S.singleton (name, n)
-                      EApp (EAtomLiteral (Atom Nothing name)) args -> S.singleton (name, length args)
+                      EApp _ (EAtomLiteral (Atom Nothing name)) args -> S.singleton (name, length args)
                       _ -> S.empty
                   )
               )

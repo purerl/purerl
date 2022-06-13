@@ -278,7 +278,7 @@ moduleToErl codegenEnv m@(Module _ _ mn _ _ _ _ _ _) foreignExports =
     EFunFull Nothing [(EFunBinder [EVar "Name", EVar "ModuleName", EVar "Init"] Nothing, runtimeLazyBody)]
 
   litAtom = EAtomLiteral . Atom Nothing
-  qualFunCall q t = EApp (EAtomLiteral $ Atom (Just q) t)
+  qualFunCall q t = EApp RegularApp (EAtomLiteral $ Atom (Just q) t)
 
   runtimeLazyBody :: Erl
   runtimeLazyBody =
@@ -293,7 +293,8 @@ moduleToErl codegenEnv m@(Module _ _ mn _ _ _ _ _ _) foreignExports =
             , ( EBinder $ litAtom "initializing", qualFunCall "erlang" "throw" [ETupleLiteral [ litAtom "not_finished_initializing", EVar "Name", EVar "ModuleName", EVar "LineNo" ] ] )
             , ( EBinder $ litAtom "undefined", EBlock
                 [ qualFunCall "erlang" "put" [ EVar "StateKey", litAtom "initializing" ]
-                , EVarBind "Value" (EApp (EVar "Init") [ litAtom "unit" ])
+                , EVarBind "Value" (EApp RegularApp (EVar "Init") [ litAtom "unit" ])
+                , qualFunCall "erlang" "put" [ EVar "ValueKey", EVar "Value" ]
                 , qualFunCall "erlang" "put" [ EVar "StateKey", litAtom "initialized" ]
                 , EVar "Value"
                 ]
@@ -400,7 +401,7 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
           ffiTyEnv = wrapTy . translateType env =<< M.lookup (Qualified (Just mn) ident) types
 
       args <- replicateM fullArity freshNameErl
-      let body = EApp (EAtomLiteral $ qualifiedToErl' mn ForeignModule ident) (take arity $ map EVar args)
+      let body = EApp RegularApp (EAtomLiteral $ qualifiedToErl' mn ForeignModule ident) (take arity $ map EVar args)
           body' = curriedApp (drop arity $ map EVar args) body
           fun = curriedLambda body' args
       fident <- fmap (Ident . ("f" <>) . T.pack . show) fresh
@@ -504,16 +505,15 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
 
       let curriedWrappingUncurried arity = do
             vars <- replicateM arity freshNameErl
-            let app = EApp (EAtomLiteral ident') (EVar <$> vars)
+            let app = EApp RegularApp (EAtomLiteral ident') (EVar <$> vars)
                 callUncurriedErl = curriedLambda app vars
             pure
               ([(ident', 0)], [EFunctionDef (TFun [] <$> erlangType) ss ident' [] callUncurriedErl])
       let uncurriedWrappingCurried arity = do
             vars <- replicateM arity freshNameErl
-            let app = EApp (EAtomLiteral ident') []
-                callCurriederl = foldl (\e a -> EApp e [a]) app (EVar <$> vars)
+            let callCurriedErl = curriedApp (EVar <$> vars) $ EApp RegularApp (EAtomLiteral ident') []
             pure
-              ([(ident', arity)], [EFunctionDef (uncurryType arity =<< erlangType) ss ident' vars callCurriederl])
+              ([(ident', arity)], [EFunctionDef (uncurryType arity =<< erlangType) ss ident' vars callCurriedErl])
 
       let guard :: Monoid a => Bool -> a -> a
           guard t x = if t then x else mempty
@@ -540,7 +540,7 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
         Just (EffFnXArity arity) -> do
           vars <- replicateM arity freshNameErl
           erl' <- valueToErl $ foldl applyStep (mkRunApp effectUncurried C.runEffectFn arity val) vars
-          pure $ curried <> ([(ident', arity)], [EFunctionDef (uncurryType arity =<< erlangType) ss ident' vars (outerWrapper (EApp erl' []))])
+          pure $ curried <> ([(ident', arity)], [EFunctionDef (uncurryType arity =<< erlangType) ss ident' vars (outerWrapper (EApp RegularApp erl' []))])
         Just (FnXArity arity) -> do
           -- Same as above
           vars <- replicateM arity freshNameErl
@@ -604,7 +604,7 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
           varTup = ETupleLiteral $ EVar . (<> "@f") <$> vars
           replaceFun fvar = everywhereOnErl go
             where
-              go (EVar f) | f == fvar = EApp (EVar $ f <> "@f") [varTup]
+              go (EVar f) | f == fvar = EApp RegularApp (EVar $ f <> "@f") [varTup]
               go e = e
 
       funs <- forM vals $ \((_, ident), val) -> do
@@ -612,7 +612,7 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
         let erl' = foldr replaceFun erl vars
         let fun = EFunFull (Just "Reccase") [(EFunBinder [varTup] Nothing, erl')]
         pure $ EVarBind (identToVar ident <> "@f") fun
-      let rebinds = map (\var -> EVarBind var (EApp (EVar $ var <> "@f") [varTup])) vars
+      let rebinds = map (\var -> EVarBind var (EApp RegularApp (EVar $ var <> "@f") [varTup])) vars
       pure $ funs ++ rebinds
 
 
@@ -649,7 +649,7 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
           | Just (FnXArity arity) <- fnArity ident,
             arity > 0 ->
             EFunRef (qualifiedToErl mn ident) arity
-        _ -> EApp (EAtomLiteral $ qualifiedToErl mn ident) []
+        _ -> EApp RegularApp (EAtomLiteral $ qualifiedToErl mn ident) []
     valueToErl' _ (Var _ ident) = return $ EVar $ qualifiedToVar ident
     valueToErl' ident (Abs _ arg val) = do
       ret <- valueToErl val
@@ -663,25 +663,25 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
       return $ EFun1 (fmap identToVar ident) arg' ret
     valueToErl' _ (Accessor _ prop val) = do
       eval <- valueToErl val
-      return $ EApp (EAtomLiteral $ Atom (Just "maps") "get") [EAtomLiteral $ AtomPS Nothing prop, eval]
+      return $ EApp RegularApp (EAtomLiteral $ Atom (Just "maps") "get") [EAtomLiteral $ AtomPS Nothing prop, eval]
     valueToErl' _ (ObjectUpdate _ o ps) = do
       obj <- valueToErl o
       sts <- mapM (sndM valueToErl) ps
       return $ EMapUpdate obj (map (first (AtomPS Nothing)) sts)
     valueToErl' _ e@(App (_, _, _, meta) _ _) = do
       let (f, args) = unApp e []
-          isSynthetic = case meta of
-                          Just IsSyntheticApp -> True
-                          _ -> False
+          eMeta = case meta of
+                          Just IsSyntheticApp -> SyntheticApp 
+                          _ -> RegularApp
       args' <- mapM valueToErl args
-      appResult <- case f of
+      case f of
         Var (_, _, _, Just IsNewtype) _ ->
           return $ head args'
         Var (_, _, _, Just (IsConstructor _ fields)) (Qualified _ ident)
           | length args == length fields ->
             return $ constructorLiteral (runIdent' ident) args'
         Var (_, _, _, Just IsTypeClassConstructor) name -> do
-          let res = curriedApp args' $ EApp (EAtomLiteral $ qualifiedToTypeclassCtor name) []
+          let res = curriedApp args' $ EApp eMeta (EAtomLiteral $ qualifiedToTypeclassCtor name) []
 
               replaceQualifiedSelfCalls = \case
                 (EAtomLiteral (Atom (Just emod) x)) | emod == atomModuleName mn PureScriptModule -> EAtomLiteral (Atom Nothing x)
@@ -691,23 +691,20 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
         -- fully saturated call to foreign import
         Var _ (Qualified _ ident)
           | isFullySaturatedForeignCall mn actualForeignArities f args ->
-            return $ EApp (EAtomLiteral $ qualifiedToErl' mn ForeignModule ident) args'
+            return $ EApp eMeta (EAtomLiteral $ qualifiedToErl' mn ForeignModule ident) args'
         -- Fully saturated (consuming tc dicts and value args in 1 call) (including "over-saturated")
         Var _ qi@(Qualified _ _)
           | Just (Arity (n, m)) <- M.lookup qi arities,
             let arity = n + m,
             length args >= arity ->
-            return $ curriedApp (drop arity args') $ EApp (EAtomLiteral (qualifiedToErl mn qi)) (take arity args')
+            return $ curriedApp (drop arity args') $ EApp eMeta (EAtomLiteral (qualifiedToErl mn qi)) (take arity args')
         -- partially saturated application (all tc dicts to be applied in 1 call and maybe more to be applied to the curried result)
         Var _ qi@(Qualified _ _)
           | Just (Arity (n, _)) <- M.lookup qi arities,
             length args >= n,
             n > 0 ->
-            return $ curriedApp (drop n args') $ EApp (EAtomLiteral (qualifiedToErl mn qi)) (take n args')
+            return $ curriedApp (drop n args') $ EApp eMeta (EAtomLiteral (qualifiedToErl mn qi)) (take n args')
         _ -> curriedApp args' <$> valueToErl f
-      pure $ case appResult of
-        EApp e es | isSynthetic -> EApp' SyntheticApp e es
-        _ -> appResult
       where
         unApp :: Expr Ann -> [Expr Ann] -> (Expr Ann, [Expr Ann])
         unApp (App _ val arg) args = unApp val (arg : args)
@@ -724,7 +721,7 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
       let ret = case (binders', vals, newvals) of
             (binders'', [val'], []) -> ECaseOf val' (map funBinderToBinder binders'')
             (binders'', _, []) -> ECaseOf (ETupleLiteral vals) (map funBinderToBinder binders'')
-            _ -> EApp (EFunFull (Just "Case") binders') (vals ++ newvals)
+            _ -> EApp RegularApp (EFunFull (Just "Case") binders') (vals ++ newvals)
       pure $ case exprs of
         [] -> ret
         _ -> EBlock (exprs ++ [ret])
@@ -741,7 +738,7 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
              in foldr (EFun1 Nothing . identToVar) body fields
        in pure createFn
 
-    iife exprs = EApp (EFun0 Nothing (EBlock exprs)) []
+    iife exprs = EApp RegularApp (EFun0 Nothing (EBlock exprs)) []
 
     constructorLiteral name args = ETupleLiteral (EAtomLiteral (Atom Nothing (toAtomName name)) : args)
 
@@ -759,7 +756,7 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
       args <- mapM f xs
       let array = EListLiteral $ fst <$> args
           binds = snd <$> args
-      pure (EApp (EAtomLiteral $ Atom (Just "array") "from_list") [array], concat binds)
+      pure (EApp RegularApp (EAtomLiteral $ Atom (Just "array") "from_list") [array], concat binds)
     literalToValueErl' mapLiteral f (ObjectLiteral ps) = do
       pairs <- mapM (sndM f) ps
       pure (mapLiteral $ map (\(label, (e, _)) -> (AtomPS Nothing label, e)) pairs, concatMap (snd . snd) pairs)
@@ -831,7 +828,7 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
                   ( (binder, ge') :
                       [(EFunBinder (replicate (length bs) (EVar "_")) Nothing, boolToAtom False) | not (irrefutable binder)]
                   )
-              cas = EApp fun vals
+              cas = EApp RegularApp fun vals
           e' <- valueToErl e
           pure ([EVarBind var cas], (EFunBinder bs (Just $ Guard $ EVar var), e'))
 
@@ -862,10 +859,10 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
 
       let arrayToList = EAtomLiteral $ Atom (Just "array") "to_list"
           cas (binder, vals) =
-            EApp
+            EApp RegularApp
               ( EFunFull
                   Nothing
-                  ( (binder, EApp arrayToList [EVar x]) :
+                  ( (binder, EApp RegularApp arrayToList [EVar x]) :
                       [(EFunBinder (replicate (length vals) (EVar "_")) Nothing, EAtomLiteral $ Atom Nothing "fail") | not (irrefutable binder)]
                   )
               )

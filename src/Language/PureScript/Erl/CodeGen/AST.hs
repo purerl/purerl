@@ -65,7 +65,7 @@ data Erl
   -- |
   -- Function application
   --
-  | EApp' AppAnnotation Erl [Erl]
+  | EApp AppAnnotation Erl [Erl]
   -- |
   -- Block
   --
@@ -103,9 +103,6 @@ data AppAnnotation
   | SyntheticApp
   deriving (Show, Eq)
 
-pattern EApp :: Erl -> [Erl] -> Erl
-pattern EApp e es = EApp' RegularApp e es
-
 -- | Simple 0-arity version of EFun1
 pattern EFun0 :: Maybe Text -> Erl -> Erl
 pattern EFun0 name e = EFunFull name [(EFunBinder [] Nothing, e)]
@@ -129,7 +126,7 @@ curriedLambda :: Erl -> [Text] -> Erl
 curriedLambda = foldr (EFun1 Nothing)
 
 curriedApp :: [Erl] -> Erl -> Erl
-curriedApp = flip (foldl (\fn a -> EApp fn [a]))
+curriedApp = flip (foldl (\fn a -> EApp RegularApp fn [a]))
 
 
 data EFunBinder
@@ -322,7 +319,7 @@ everywhereOnErl f = go
   go (EFunctionDef t ssann a ss e) = f $ EFunctionDef t ssann a ss (go e)
   go (EVarBind x e) = f $ EVarBind x (go e)
   go (EFunFull fname args) = f $ EFunFull fname $ map (second go) args
-  go (EApp e es) = f $ EApp (go e) (map go es)
+  go (EApp meta e es) = f $ EApp meta (go e) (map go es)
   go (EBlock es) = f $ EBlock (map go es)
   go (ETupleLiteral es) = f $ ETupleLiteral (map go es)
   go (EMapLiteral binds) = f $ EMapLiteral $ map (second go) binds
@@ -350,7 +347,7 @@ everywhereOnErlTopDownM f = f >=> go
   go (EFunctionDef t ssann a ss e) = EFunctionDef t ssann a ss <$> f' e
   go (EVarBind x e) = EVarBind x <$> f' e
   go (EFunFull fname args) = EFunFull fname <$> fargs args
-  go (EApp e es) = EApp <$> f' e <*> traverse f' es
+  go (EApp meta e es) = EApp meta <$> f' e <*> traverse f' es
   go (EBlock es) = EBlock <$> traverse f' es
   go (ETupleLiteral es) = ETupleLiteral <$> traverse f' es
   go (EMapLiteral binds) = EMapLiteral <$> fargs binds
@@ -378,7 +375,7 @@ everywhereOnErlTopDownMThen f = f'
   go (EFunctionDef t ssann a ss e) = EFunctionDef t ssann a ss <$> f' e
   go (EVarBind x e) = EVarBind x <$> f' e
   go (EFunFull fname args) = EFunFull fname <$> fargs args
-  go (EApp e es) = EApp <$> f' e <*> traverse f' es
+  go (EApp meta e es) = EApp meta <$> f' e <*> traverse f' es
   go (EBlock es) = EBlock <$> traverse f' es
   go (ETupleLiteral es) = ETupleLiteral <$> traverse f' es
   go (EMapLiteral binds) = EMapLiteral <$> fargs binds
@@ -398,7 +395,7 @@ everything (<>.) f = go
   go e0@(EFunctionDef _ _ _ _ e) = f e0 <>. go e
   go e0@(EVarBind _ e) = f e0 <>. go e
   go e0@(EFunFull _ args) = foldl (<>.) (f e0) (map (go . snd) args)
-  go e0@(EApp e es) = foldl (<>.) (f e0 <>. go e) (map go es)
+  go e0@(EApp _ e es) = foldl (<>.) (f e0 <>. go e) (map go es)
   go e0@(EBlock es) = foldl (<>.) (f e0) (map go es)
   go e0@(ETupleLiteral es) = foldl (<>.) (f e0) (map go es)
   go e0@(EMapLiteral binds) = foldl (<>.) (f e0) (map (go . snd) binds)

@@ -11,17 +11,17 @@ inlineSimpleGuards = everywhereOnErl convert
     convert :: Erl -> Erl
     convert (EBlock es) | not (null es) =
       case last es of
-        EApp (EFunFull Nothing funbinders) vars ->
+        EApp meta (EFunFull Nothing funbinders) vars ->
           let res = convert' vars funbinders (take (length es - 1) es) [] []
            in let (funbinders', ebs) = res
-               in EBlock (ebs ++ [EApp (EFunFull Nothing funbinders') vars])
+               in EBlock (ebs ++ [EApp meta (EFunFull Nothing funbinders') vars])
         _ -> EBlock es
     convert other = other
 
     convert'
       vars
       (efb@(EFunBinder binds guard, e) : es)
-      (eb@(EVarBind x (EApp (EFunFull Nothing [(EFunBinder binds' Nothing, eg), defBind]) vars')) : ebs)
+      (eb@(EVarBind x (EApp _ (EFunFull Nothing [(EFunBinder binds' Nothing, eg), defBind]) vars')) : ebs)
       acc_es
       acc_ebs
         | binds == binds' && vars == vars' && isGuardVar x guard && isDefaultBinder defBind =

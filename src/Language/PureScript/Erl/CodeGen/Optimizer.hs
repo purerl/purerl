@@ -39,7 +39,8 @@ import Control.Monad ((<=<))
 -- Apply a series of optimizer passes to simplified Javascript code
 --
 optimize :: MonadSupply m => [(Atom, Int)] -> Map Atom Int -> [Erl] -> m [Erl]
-optimize exports memoizable es = removeUnusedFuns exports <$> traverse go es
+optimize exports memoizable es = removeUnusedFuns exports <$>
+  traverse go es
   where
   go erl =
    do
@@ -96,11 +97,11 @@ buildExpander = replaceAtoms . foldr go []
   replaceAtoms updates = everywhereOnErl (replaceAtom updates)
   
   replaceAtom updates = \case
-    EApp (EAtomLiteral a) [] | Just e <- lookup a updates
+    EApp _ (EAtomLiteral a) [] | Just e <- lookup a updates
       -> replaceAtoms updates e
     other -> other
 
   -- simple nested applications that look similar to floated synthetic apps
-  isSimpleApp (EApp e1 es) = isSimpleApp e1 && all isSimpleApp es
+  isSimpleApp (EApp _ e1 es) = isSimpleApp e1 && all isSimpleApp es
   isSimpleApp (EAtomLiteral _) = True
   isSimpleApp _ = False

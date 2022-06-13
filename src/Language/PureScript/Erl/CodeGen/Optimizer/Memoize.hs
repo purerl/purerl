@@ -13,7 +13,7 @@ addMemoizeAnnotations :: Map Atom Int -> Erl -> Erl
 addMemoizeAnnotations _memoizable = everywhereOnErl go
   where
   go e = case e of
-    EApp' SyntheticApp _ _
+    EApp SyntheticApp _ _
       -> memoizeAnnotation e
     -- without using the annotation, but inferring things that seem to have fully applied tc args
     -- EApp' _ (EAtomLiteral f) args
@@ -23,4 +23,4 @@ addMemoizeAnnotations _memoizable = everywhereOnErl go
     other -> other
 
 memoizeAnnotation :: Erl -> Erl
-memoizeAnnotation emem = EApp (EVar "?MEMOIZE") [emem]
+memoizeAnnotation emem = EApp RegularApp (EVar "?MEMOIZE") [emem]

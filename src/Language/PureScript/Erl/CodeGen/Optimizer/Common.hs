@@ -13,12 +13,12 @@ import Language.PureScript.PSString (PSString)
 import Prelude.Compat
 
 isFn :: (Text, Text) -> Erl -> Bool
-isFn (moduleName, fnName) (EApp (EAtomLiteral (Atom (Just x) y)) []) =
+isFn (moduleName, fnName) (EApp _ (EAtomLiteral (Atom (Just x) y)) []) =
   x == moduleName && y == fnName
 isFn _ _ = False
 
 isDict :: (Text, PSString) -> Erl -> Bool
-isDict (moduleName, dictName) (EApp (EAtomLiteral (Atom (Just x) y)) []) = x == moduleName && y == atomPS dictName
+isDict (moduleName, dictName) (EApp _ (EAtomLiteral (Atom (Just x) y)) []) = x == moduleName && y == atomPS dictName
 isDict _ _ = False
 
 isUncurriedFn :: (Text, PSString) -> Erl -> Bool
@@ -29,8 +29,8 @@ isFnName (moduleName, dictName) (EAtomLiteral (Atom (Just x) y)) = x == moduleNa
 isFnName _ _ = False
 
 isAppliedDict :: (Text, PSString) -> (Text, PSString) -> Erl -> Bool
-isAppliedDict fnDict theDict (EApp (EApp fn []) [EApp dict []]) = isFnName theDict dict && isFnName fnDict fn
-isAppliedDict fnDict theDict (EApp fn [EApp dict []]) = isFnName theDict dict && isFnName fnDict fn
+isAppliedDict fnDict theDict (EApp _ (EApp _ fn []) [EApp _ dict []]) = isFnName theDict dict && isFnName fnDict fn
+isAppliedDict fnDict theDict (EApp _ fn [EApp _ dict []]) = isFnName theDict dict && isFnName fnDict fn
 isAppliedDict _ _ _ = False
 
 isUncurriedFn' :: (Text, Text) -> Erl -> Bool
@@ -94,7 +94,7 @@ replaceIdents vars = go
     go (EBinary op e1 e2) = f $ EBinary op (go e1) (go e2)
     go (EFunctionDef t ssann a ss e) = f $ EFunctionDef t ssann a ss (go e)
     go (EVarBind x e) = f $ EVarBind x (go e)
-    go (EApp e es) = f $ EApp (go e) (map go es)
+    go (EApp meta e es) = f $ EApp meta (go e) (map go es)
     go (EBlock es) = f $ EBlock (map go es)
     go (ETupleLiteral es) = f $ ETupleLiteral (map go es)
     go (EMapLiteral binds) = f $ EMapLiteral $ map (second go) binds
@@ -136,8 +136,8 @@ collect :: Int -> Erl -> Erl
 collect n e = go e []
   where
     go :: Erl -> [Erl] -> Erl
-    go (EApp f x) acc | not (null x) =
+    go (EApp meta f x) acc | not (null x) =
       case x <> acc of
-        args | length args >= n -> EApp f args
+        args | length args >= n -> EApp meta f args
         args -> go f args
     go _other _acc = e
