@@ -128,6 +128,11 @@ curriedLambda = foldr (EFun1 Nothing)
 curriedApp :: [Erl] -> Erl -> Erl
 curriedApp = flip (foldl (\fn a -> EApp RegularApp fn [a]))
 
+litAtom :: Text -> Erl
+litAtom = EAtomLiteral . Atom Nothing
+qualFunCall :: Text -> Text -> [Erl] -> Erl
+qualFunCall q t = EApp RegularApp (EAtomLiteral $ Atom (Just q) t)
+
 
 data EFunBinder
  = EFunBinder [Erl] (Maybe Guard)

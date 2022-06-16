@@ -159,9 +159,9 @@ buildCodegenEnvironment env = CodegenEnvironment env explicitArities
     types = M.map (\(t, _, _) -> t) $ E.names env
 
 data Arities = Arities
-  { effective :: M.Map (Qualified Ident) FnArity
-  , used :: M.Map (Qualified Ident) (Set Int)
-  , actualForeign :: M.Map (Qualified Ident) Int
+  { _effective :: M.Map (Qualified Ident) FnArity
+  , _used :: M.Map (Qualified Ident) (Set Int)
+  , _actualForeign :: M.Map (Qualified Ident) Int
   }
 
 findArities :: ModuleName -> [Bind Ann] -> CodegenEnvironment -> [(T.Text, Int)] -> Arities
@@ -270,22 +270,20 @@ moduleToErl codegenEnv m@(Module _ _ mn _ _ _ _ _ _) foreignExports =
   -- we would naturally recurse forever instead of throwing as specced. Given most instances don't require this, the overhead may be worth
   -- finding an explicit error instead of hang
   runtimeLazy :: Erl
-  runtimeLazy = EFunctionDef Nothing Nothing (Atom Nothing $ identToAtomName $ InternalIdent RuntimeLazyFactory) ["Name", "ModuleName", "Init"] runtimeLazyBody
+  runtimeLazy = EFunctionDef Nothing Nothing (Atom Nothing $ identToAtomName $ InternalIdent RuntimeLazyFactory) ["CtxRef", "Name", "ModuleName", "Init"] runtimeLazyBody
 
   -- TODO I don't want to need this
   runtimeLazyCurried :: Erl
-  runtimeLazyCurried = EFunctionDef Nothing Nothing (Atom Nothing $ identToAtomName $ InternalIdent RuntimeLazyFactory) [] $
+  runtimeLazyCurried = EFunctionDef Nothing Nothing (Atom Nothing $ identToAtomName $ InternalIdent RuntimeLazyFactory) [ "CtxRef" ] $
     EFunFull Nothing [(EFunBinder [EVar "Name", EVar "ModuleName", EVar "Init"] Nothing, runtimeLazyBody)]
-
-  litAtom = EAtomLiteral . Atom Nothing
-  qualFunCall q t = EApp RegularApp (EAtomLiteral $ Atom (Just q) t)
 
   runtimeLazyBody :: Erl
   runtimeLazyBody =
     EBlock
       [
-        EVarBind "StateKey" (ETupleLiteral [ EVar "Name", EVar "ModuleName", EAtomLiteral (Atom Nothing "lazy_state_@purerl")])
-      , EVarBind "ValueKey" (ETupleLiteral [ EVar "Name", EVar "ModuleName", EAtomLiteral (Atom Nothing "lazy_value_@purerl")])
+        -- TODO This means this is never cached at the top level. In fact it might simply not work
+        EVarBind "StateKey" (ETupleLiteral [ EVar "Name", EVar "ModuleName", EAtomLiteral (Atom Nothing "lazy_state_@purerl"), EVar "CtxRef" ])
+      , EVarBind "ValueKey" (ETupleLiteral [ EVar "Name", EVar "ModuleName", EAtomLiteral (Atom Nothing "lazy_value_@purerl"), EVar "CtxRef" ])
       , EFun1 Nothing "LineNo"
          ( EBlock
           [ ECaseOf (qualFunCall "erlang" "get" [EVar "StateKey"])
@@ -407,7 +405,7 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
       fident <- fmap (Ident . ("f" <>) . T.pack . show) fresh
       let var = Qualified Nothing fident
           wrap e = EBlock [EVarBind (identToVar fident) fun, e]
-      (idents, erl, env) <- generateFunctionOverloads True Nothing (ssAnn nullSourceSpan) ident (Atom Nothing $ runIdent' ident) (Var (ssAnn nullSourceSpan) var) wrap
+      (idents, erl, env) <- generateFunctionOverloads Nothing True Nothing (ssAnn nullSourceSpan) ident (Atom Nothing $ runIdent' ident) (Var (ssAnn nullSourceSpan) var) wrap
       let combinedTEnv = M.union env (maybe M.empty snd ffiTyEnv)
       pure (idents, erl, (ident,) . fst <$> ffiTyEnv, combinedTEnv)
 
@@ -465,27 +463,44 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
 
     topBindToErl :: (Bind Ann -> m ([(Atom, Int)], [Erl], ETypeEnv))
     topBindToErl = \case
-      NonRec ann ident val -> topNonRecToErl ann ident val
-      Rec vals -> concatRes <$>
-        (writer ((mempty,) <$> applyLazinessTransform mn vals) >>=
-          traverse (uncurry . uncurry $ topNonRecToErl))
+      NonRec ann ident val -> topNonRecToErl False ann ident val
+      Rec vals ->
+        let (vals', needRuntimeLazy@(Any needLazyRef)) = applyLazinessTransform mn vals
+        in
+          concatRes <$>
+          (writer (vals', (mempty, needRuntimeLazy)) >>=
+              traverse (uncurry . uncurry $ topNonRecToErl needLazyRef))
 
-    topNonRecToErl :: Ann -> Ident -> Expr Ann -> m ([(Atom, Int)], [Erl], ETypeEnv)
-    topNonRecToErl (ss, _, _, _) ident val = do
+
+    topNonRecToErl :: Bool -> Ann -> Ident -> Expr Ann -> m ([(Atom, Int)], [Erl], ETypeEnv)
+    topNonRecToErl inLazyRecGroup (ss, _, _, _) ident val = do
       let eann@(_, _, _, meta') = extractAnn val
           ident' = case meta' of
             Just IsTypeClassConstructor -> identToTypeclassCtor ident
             _ -> Atom Nothing $ runIdent' ident
 
       val' <- ensureFreshVars_ val
+      (maybeVarName, wrapper) <- if inLazyRecGroup then
+        do
+          lazyVarName <- freshNameErl' "LazyCtxRef"
+          pure (Just lazyVarName, \e -> EBlock [ EVarBind lazyVarName $ litAtom "top_level", e ])
+        else
+          pure (Nothing, id)
+      generateFunctionOverloads maybeVarName False (Just ss) eann ident ident' val' wrapper
 
-      generateFunctionOverloads False (Just ss) eann ident ident' val' id
-
-    generateFunctionOverloads :: Bool -> Maybe SourceSpan -> Ann -> Ident -> Atom -> Expr Ann -> (Erl -> Erl) -> m ([(Atom, Int)], [Erl], ETypeEnv)
-    generateFunctionOverloads isForeign ss eann ident ident' val outerWrapper = do
+    generateFunctionOverloads :: Maybe T.Text -> Bool -> Maybe SourceSpan -> Ann -> Ident -> Atom -> Expr Ann -> (Erl -> Erl) -> m ([(Atom, Int)], [Erl], ETypeEnv)
+    generateFunctionOverloads lazyVarName isForeign ss eann ident ident' val outerWrapper = do
       -- Always generate the plain curried form, f x y = ... -~~> f() -> fun (X) -> fun (Y) -> ... end end.
       let qident = Qualified (Just mn) ident
-      erl <- valueToErl val
+          replaceLazyCall = everywhereOnErl go
+            where
+              go (EApp RegularApp lazyFactory [ ])
+               | lazyFactory == EAtomLiteral (Atom Nothing $ identToAtomName $ InternalIdent RuntimeLazyFactory)
+               , Just varName <- lazyVarName
+               = EApp RegularApp lazyFactory [ EVar varName ]
+              go e = e
+
+      erl <- replaceLazyCall <$> valueToErl val
 
       let translated = translateType env <$> M.lookup qident types
           erlangType = replaceVars . fst <$> translated
@@ -560,7 +575,6 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
                   erl'' <- valueToErl $ foldl applyStep val (take n vars)
                   pure ([(ident', n)], [EFunctionDef Nothing ss ident' (take n vars) (outerWrapper erl'')])
 
-            -- traceM $ show (qident, M.lookup qident usedArities)
             if countAbs val == arity && usedArity arity
               then do
                 erl' <- valueToErl $ foldl applyStep val vars
@@ -583,12 +597,6 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
           then (res1, res2, etypeEnv)
           else ([], res2, etypeEnv)
 
-
-
-
-
-
-
     bindToErl :: Bind Ann -> m [Erl]
     bindToErl (NonRec _ ident val) =
       pure . EVarBind (identToVar ident) <$> valueToErl' (Just ident) val
@@ -599,12 +607,19 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
     -- and then bind these F = F'({F',G'})
     -- TODO: Only do this if there are multiple mutually recursive bindings! Else a named fun works.
     bindToErl (Rec origVals) = do
-      vals <- writer $ (mempty,) <$> applyLazinessTransform mn origVals
+      let (vals, needRuntimeLazy@(Any needLazyRef)) = applyLazinessTransform mn origVals
+      tell (mempty, needRuntimeLazy)
+      lazyVarName <- freshNameErl' "LazyCtxRef"
       let vars = identToVar . snd . fst <$> vals
           varTup = ETupleLiteral $ EVar . (<> "@f") <$> vars
+
           replaceFun fvar = everywhereOnErl go
             where
               go (EVar f) | f == fvar = EApp RegularApp (EVar $ f <> "@f") [varTup]
+              go (EApp RegularApp lazyFactory [ ])
+               | lazyFactory == EAtomLiteral (Atom Nothing $ identToAtomName $ InternalIdent RuntimeLazyFactory)
+               , needLazyRef
+               = EApp RegularApp lazyFactory [ EVar lazyVarName ]
               go e = e
 
       funs <- forM vals $ \((_, ident), val) -> do
@@ -613,8 +628,10 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
         let fun = EFunFull (Just "Reccase") [(EFunBinder [varTup] Nothing, erl')]
         pure $ EVarBind (identToVar ident <> "@f") fun
       let rebinds = map (\var -> EVarBind var (EApp RegularApp (EVar $ var <> "@f") [varTup])) vars
-      pure $ funs ++ rebinds
-
+          -- TODO this is not unique in the case of multiple recursive binding groups in same scope
+          -- And deduplicating would also be incorrect for overridden idents
+          ctxRef = [ EVarBind lazyVarName $ qualFunCall "erlang" "make_ref" [] | needLazyRef ]
+      pure $ ctxRef ++ funs ++ rebinds
 
     qualifiedToVar (Qualified _ ident) = identToVar ident
 
@@ -671,7 +688,7 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
     valueToErl' _ e@(App (_, _, _, meta) _ _) = do
       let (f, args) = unApp e []
           eMeta = case meta of
-                          Just IsSyntheticApp -> SyntheticApp 
+                          Just IsSyntheticApp -> SyntheticApp
                           _ -> RegularApp
       args' <- mapM valueToErl args
       case f of

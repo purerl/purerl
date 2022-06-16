@@ -203,3 +203,4 @@ freshNameErl' base = fmap (((base <> "@") <>) . T.pack . show) fresh
 
 freshNameErl :: (MonadSupply m) => m T.Text
 freshNameErl = freshNameErl' "_"
+
