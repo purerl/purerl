@@ -77,6 +77,17 @@ executables:
         dependencies:
         - gitrev >=1.2.0 && <1.4
 
+tests:
+  tests:
+    main: Main.hs
+    source-dirs:
+      - tests
+    dependencies:
+      - purerl
+      - hspec
+    build-tools:
+      - hspec-discover
+
 default-extensions:
   - ConstraintKinds
   - DataKinds
