@@ -12,16 +12,16 @@ packages:
   original:
     hackage: language-javascript-0.7.0.0
 - completed:
-    size: 774868
-    url: https://github.com/purescript/purescript/archive/e4c98bb3e1829862ba0c9c0cec5e82c360ce4d9d.tar.gz
+    size: 775318
+    url: https://github.com/purescript/purescript/archive/1887bcf2ebb3f15f8410f1d353e344e42f7d3b9c.tar.gz
     name: purescript
     version: 0.15.2
-    sha256: 68f69f59274223e65cae384b82787c62f1b52936eb139a77aebb7e582413f445
+    sha256: 7b4aee874797a2cee7a4422c7588368e1ec6397fd21957e92c70ff06791dbfe2
     pantry-tree:
-      size: 141205
-      sha256: a359d9a273231c0b0ffe565d724d5f759dc8dabd1ad5577196026e3f1e0cf12c
+      size: 141507
+      sha256: b11e0000ffd60d522815c28f9acdcb8c4bf00bb2a1e80808659abeaaae29b2dd
   original:
-    url: https://github.com/purescript/purescript/archive/e4c98bb3e1829862ba0c9c0cec5e82c360ce4d9d.tar.gz
+    url: https://github.com/purescript/purescript/archive/1887bcf2ebb3f15f8410f1d353e344e42f7d3b9c.tar.gz
 - completed:
     hackage: process-1.6.13.1@sha256:1fc2173110c0bf3274b1710c75af3f70ef6c90edafa56de7160992dec4ad4608,2845
     pantry-tree:
@@ -30,22 +30,43 @@ packages:
   original:
     hackage: process-1.6.13.1
 - completed:
-    hackage: Cabal-3.2.1.0@sha256:8743076ec022296f9771d962000c9ca3a0fe02e68c37b992c63e382a675f791d,27482
+    hackage: Cabal-3.6.3.0@sha256:ff97c442b0c679c1c9876acd15f73ac4f602b973c45bde42b43ec28265ee48f4,12459
     pantry-tree:
-      size: 41224
-      sha256: 92682a2aab8d967de341acff88525376eb9a31f53f094e0878c51c2886564f3a
+      size: 19757
+      sha256: b250a53bdb56844f047a2927833bb565b936a289abfa85dfc2a63148d776368a
   original:
-    hackage: Cabal-3.2.1.0
+    hackage: Cabal-3.6.3.0
 - completed:
-    hackage: monoidal-containers-0.6.2.0@sha256:97289baf716f22fdae04b4fcbee066453d2f4c630ef3f631aeeab61ee713841e,2309
+    hackage: protolude-0.3.1@sha256:1cc9e5a5c26c33a43c52b554443dd9779fef13974eaa0beec7ca6d2551b400da,2647
     pantry-tree:
-      size: 569
-      sha256: 55c0b7f60f8350546d437c9c0ad52c1dba35cac727972e7dc0f12201870df62f
+      size: 1645
+      sha256: 6452a6ca8d395f7d810139779bb0fd16fc1dbb00f1862630bc08ef5a100430f9
   original:
-    hackage: monoidal-containers-0.6.2.0
+    hackage: protolude-0.3.1
+- completed:
+    hackage: hspec-2.9.2@sha256:03c074bcadf13bdb5fda795fcce9f83a9532685d084bb0a325fdd632c3655a76,1709
+    pantry-tree:
+      size: 583
+      sha256: d57b65ada392a372ded96431955aaf7e531be6e1f67e91e1c0da4739e8803759
+  original:
+    hackage: hspec-2.9.2
+- completed:
+    hackage: hspec-core-2.9.2@sha256:0b1d612f6a1db1c898196e018de785a11105fd5452b40bbec168838f013a38cf,5673
+    pantry-tree:
+      size: 5039
+      sha256: 013d08dcf8bb419890a12fe70e7720b881cf9b857fbc0c1a34a2302a480207af
+  original:
+    hackage: hspec-core-2.9.2
+- completed:
+    hackage: hspec-discover-2.9.2@sha256:19d259b90dfaf71449fede71a0e850cf16b57493d74624ffddf8cd67bcec8032,2167
+    pantry-tree:
+      size: 828
+      sha256: d29a38ad6ad188dd68c11bd799307ea950ab26ee0909ba50effb5629ab2f584d
+  original:
+    hackage: hspec-discover-2.9.2
 snapshots:
 - completed:
-    size: 586286
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/18/15.yaml
-    sha256: 2c9cb11d7aa0656bf28672dcb2414ab21e3ba9ea83ca170c216b2c2fc7e55856
-  original: lts-18.15
+    size: 607265
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/nightly/2022/6/9.yaml
+    sha256: 819ac07621dac5b2c320c45cb8c27f141f95114a1749b19b06d2c3606c79e839
+  original: nightly-2022-06-09

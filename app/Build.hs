@@ -25,7 +25,7 @@ import Data.Bifunctor (first)
 import Data.Bool (bool)
 import qualified Data.ByteString.Lazy.UTF8 as LBU8
 import Data.Either (isLeft, partitionEithers)
-import qualified Data.HashMap.Strict as HashMap
+import qualified Data.Aeson.KeyMap as Json.Map
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe (catMaybes, fromMaybe, isNothing, mapMaybe, maybeToList)
@@ -260,7 +260,7 @@ compile' BuildOptions {..} = do
     getModulePath :: Value -> Maybe FilePath
     getModulePath corefn =
       case corefn of
-        Object o | Just (String filename) <- HashMap.lookup "modulePath" o -> Just $ T.unpack filename
+        Object o | Just (String filename) <- Json.Map.lookup "modulePath" o -> Just $ T.unpack filename
         _ -> Nothing
 
     getCacheInfo :: FilePath -> FilePath -> FilePath -> MM.Make (Maybe FilePath, Map FilePath (UTCTime, MM.Make Cache.ContentHash))

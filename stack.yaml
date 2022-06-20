@@ -1,17 +1,26 @@
-resolver: lts-18.15
-pvp-bounds: upper
+resolver: nightly-2022-06-09
+pvp-bounds: both
 packages:
 - .
 extra-deps:
 - language-javascript-0.7.0.0
 - github: purescript/purescript
-  commit: e4c98bb3e1829862ba0c9c0cec5e82c360ce4d9d
+  commit: 1887bcf2ebb3f15f8410f1d353e344e42f7d3b9c
 # Fix issue with libtinfo.
 # See https://github.com/purescript/purescript/issues/4253
 - process-1.6.13.1
-- Cabal-3.2.1.0
-# Not included in Stackage until the lts-19 series
-- monoidal-containers-0.6.2.0
+
+# The Cabal library is not in Stackage
+- Cabal-3.6.3.0
+# Protolude is not yet in resolver snapshot
+- protolude-0.3.1
+# hspec@2.9.3 is the first version that starts depending on ghc
+# ghc depends on terminfo by default, but that can be ignored
+# if one uses the '-terminfo' flag.
+# Unfortunately, hspec doesn't expose a similar flag.
+- hspec-2.9.2
+- hspec-core-2.9.2
+- hspec-discover-2.9.2
 flags:
   aeson-pretty:
     lib-only: true
