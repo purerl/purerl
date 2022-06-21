@@ -2,9 +2,12 @@ module Where4179 where
 
 import Prelude
 import Partial.Unsafe (unsafePartial)
+import Effect (Effect)
+import Effect.Console (log)
 
-main :: Unit
-main = unit
+main :: Effect Unit
+main =
+  log "Done"
 
   where
 

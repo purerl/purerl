@@ -15,6 +15,7 @@ main = do
   log $ show $ onlyArray [1]
   log $ show $ maybeArray $ Just [1 , 2 ]
   log $ show $ namedArray [1, 2]
+  log "Done"
 
 bug28 a = 
   case a of 

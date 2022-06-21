@@ -55,7 +55,7 @@ runProgram runModule =
 
       res@(_, out, _) <- readProcessWithExitCode "erl" [ "-pa", "ebin", "-noshell", "-eval", "io:setopts([{encoding,utf8}]), (" <> T.unpack erlName <> "())()", "-eval", "init:stop()" ] ""
       exitOnFailure "Error running erl" res
-      putStrLn out
+      putStr out
       pure ()
     _ -> do
       hPutStrLn stderr $ "Error parsing module: " <> T.unpack runModule

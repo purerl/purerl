@@ -28,7 +28,7 @@ import qualified Data.Text.Encoding as T
 import Data.Time.Clock (UTCTime(), diffUTCTime, getCurrentTime, nominalDay)
 import Data.Tuple (swap)
 import System.Directory
-import System.Exit (exitFailure)
+import System.Exit
 import System.Environment (lookupEnv)
 import System.FilePath
 import System.IO.Error (isDoesNotExistError)
@@ -67,7 +67,7 @@ getTestFiles testDir = do
 
 buildSupportModules :: IO ()
 buildSupportModules = withCurrentDirectory "tests/support" $ do 
-  callCommand "spago build --deps-only"
+  callCommand "spago -q build --deps-only"
 
 compile
   :: [FilePath]
@@ -76,7 +76,11 @@ compile inputFiles = withCurrentDirectory "tests/support" $ do
     -- Sorting the input files makes some messages (e.g., duplicate module) deterministic
   -- fs <- readInput (sort inputFiles)
   let inputFiles' = (\f -> ".." </> ".." </> f) <$> inputFiles
-  callCommand $ "spago build -p " <> unwords inputFiles'
+  result <- readProcessWithExitCode "spago" ([ "-q", "build", "-p" ] ++ inputFiles') ""
+  case result of
+    (ExitSuccess, out, err) -> pure () -- hPutStr outputFile out
+    (ExitFailure _, _, err) -> expectationFailure err
+
 
 createOutputFile :: FilePath -> IO Handle
 createOutputFile logfileName = do
@@ -129,5 +133,48 @@ updateSupportCode = withCurrentDirectory "tests/support" $ do
     putStrLn $ replicate 79 '#'
     putStrLn ""
 
+
+
+-- | Assert that the contents of the provided file path match the result of the
+-- provided action. If the "HSPEC_ACCEPT" environment variable is set, or if the
+-- file does not already exist, we write the resulting ByteString out to the
+-- provided file path instead. However, if the "CI" environment variable is
+-- set, "HSPEC_ACCEPT" is ignored and we require that the file does exist with
+-- the correct contents (see #3808). Based (very loosely) on the tasty-golden
+-- package.
+goldenVsString
+  :: HasCallStack -- For expectationFailure; use the call site for better failure locations
+  => FilePath
+  -> IO ByteString
+  -> Expectation
+goldenVsString goldenFile testAction = do
+  accept <- isJust <$> lookupEnv "HSPEC_ACCEPT"
+  ci <- isJust <$> lookupEnv "CI"
+  goldenContents <- tryJust (guard . isDoesNotExistError) (BS.readFile goldenFile)
+  case goldenContents of
+    Left () ->
+      -- The golden file does not exist
+      if ci
+        then expectationFailure $ "Missing golden file: " ++ goldenFile
+        else createOrReplaceGoldenFile
+
+    Right _ | not ci && accept ->
+      createOrReplaceGoldenFile
+
+    Right expected -> do
+      actual <- testAction
+      if expected == actual
+        then pure ()
+        else expectationFailure $
+          "Test output differed from '" ++ goldenFile ++ "'; got:\n" ++
+          T.unpack (T.decodeUtf8With (\_ _ -> Just '\xFFFD') actual)
+  where
+  createOrReplaceGoldenFile = do
+    testAction >>= BS.writeFile goldenFile
+    pendingWith "Accepting new output"
+
 logpath :: FilePath
 logpath = "purescript-output"
+
+trim :: String -> String
+trim = dropWhile isSpace >>> reverse >>> dropWhile isSpace >>> reverse

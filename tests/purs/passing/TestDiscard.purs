@@ -29,4 +29,4 @@ main :: Effect Unit
 main = do
   logShow (test :: Maybe Int)
   logShow testMaybe
-
+  log "Done"

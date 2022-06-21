@@ -3,6 +3,7 @@ module Optimize4179 where
 import Prelude
 
 import Partial.Unsafe (unsafePartial)
+import Effect.Console (log)
 
 isEven n = n == 0 || isOdd (n - 1)
 isOdd n = n > 0 && not (isEven (n - 1))
@@ -44,3 +45,6 @@ tcoable :: Int -> String
 tcoable = unsafePartial case _ of
   0 -> "done"
   n | n > 0 -> tcoable (n - 1)
+
+-- TODO should this be an optimize test, copy original
+main = log "Done"
