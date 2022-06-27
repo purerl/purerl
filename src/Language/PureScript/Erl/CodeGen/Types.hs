@@ -153,13 +153,13 @@ translateType env = flip runState Map.empty . go
     _ -> pure TAny
 
   ctorTy :: ModuleName -> Text -> SourceType
-  ctorTy modName fn = TypeConstructor nullSourceAnn (Qualified (Just modName) (ProperName fn))
+  ctorTy modName fn = TypeConstructor nullSourceAnn (Qualified (P.ByModuleName modName) (ProperName fn))
 
 uncurriedFnTypes :: ModuleName -> Text -> SourceType -> Maybe (Int, [SourceType])
 uncurriedFnTypes moduleName fnName = check <=< collectTypeApp
   where
   check :: (Qualified (ProperName 'P.TypeName), [SourceType]) -> Maybe (Int, [SourceType])
-  check (Qualified (Just mn) (ProperName fnN), tys) =
+  check (Qualified (P.ByModuleName mn) (ProperName fnN), tys) =
     let n = length tys - 1
       in if n >= 1 && n <= 10 && fnN == (fnName <> Text.pack (show n)) && mn == moduleName
           then Just (n, tys)
@@ -193,7 +193,7 @@ replaceVars = go
 
 erlTypeName :: Qualified (ProperName 'P.TypeName) -> Text
 erlTypeName (Qualified mn' ident)
-  | Just mn'' <- mn' =
+  | P.ByModuleName mn'' <- mn' =
     -- TODO this is easier to read but clashes builtins
     -- , mn'' /= mn =
     toAtomName $ erlModuleNameBase mn'' <> "_" <> P.runProperName ident
@@ -208,5 +208,5 @@ isNewtypeConstructor e ctor = case lookupConstructor e ctor of
 
   where
   lookupConstructor :: Environment -> Qualified (P.ProperName 'P.ConstructorName) -> Maybe (P.DataDeclType, ProperName 'P.TypeName, P.SourceType, [Ident])
-  lookupConstructor env' ctor =
-    ctor `M.lookup` P.dataConstructors env'
+  lookupConstructor env' c =
+    c `M.lookup` P.dataConstructors env'

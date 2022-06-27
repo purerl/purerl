@@ -42,7 +42,7 @@ compileBeam noisy ebin files = do
 runProgram :: Text -> IO ()
 runProgram runModule =
   case nameFromString runModule of
-    Just (P.Qualified (Just mn') ident) -> do
+    Just (P.Qualified (P.ByModuleName mn') ident) -> do
       let erlName = runAtom $ Atom (Just $ atomModuleName mn' PureScriptModule) (P.runIdent ident)
       readProcessWithExitCode "mkdir" ["-p", "ebin"] [] >>=
         exitOnFailure "Couldn't create ebin directory"
@@ -72,7 +72,7 @@ runProgram runModule =
         (modules, [ident]) -> 
           let mn = P.ModuleName $ T.intercalate "." modules
           in
-          Just $ P.Qualified (Just mn) (P.Ident ident)
+          Just $ P.Qualified (P.ByModuleName mn) (P.Ident ident)
         _ -> Nothing
     where
     split = T.splitOn "." text

@@ -98,7 +98,7 @@ qualifiedToErl' mn' moduleType ident = Atom (Just $ atomModuleName mn' moduleTyp
 
 -- Top level definitions are everywhere fully qualified, variables are not.
 qualifiedToErl :: ModuleName -> Qualified Ident -> Atom
-qualifiedToErl mn (Qualified (Just mn') ident)
+qualifiedToErl mn (Qualified (P.ByModuleName mn') ident)
   -- Local reference to local non-exported function
   | mn == mn' -- TODO making all local calls non qualified - for memoization onload - revert
   -- && ident `Set.notMember` declaredExportsSet  =
@@ -107,7 +107,7 @@ qualifiedToErl mn (Qualified (Just mn') ident)
   -- Reference other modules or exported things via module name
   | otherwise =
     qualifiedToErl' mn' PureScriptModule ident
-qualifiedToErl _ (Qualified Nothing ident) = Atom Nothing (runIdent' ident)
+qualifiedToErl _ (Qualified (P.BySourcePos _) ident) = Atom Nothing (runIdent' ident)
 
 
 
@@ -120,8 +120,8 @@ concatRes x = (concatMap (\(a, _, _) -> a) x, concatMap (\(_, b, _) -> b) x, M.u
 
 isFullySaturatedForeignCall :: ModuleName -> M.Map (Qualified Ident) Int -> Expr Ann -> [a] -> Bool
 isFullySaturatedForeignCall mn actualForeignArities var args = case var of
-  Var _ qi@(Qualified (Just mn') _)
-    | mn' == mn,
+  Var _ qi
+    | P.isQualifiedWith mn qi,
       Just arity <- M.lookup qi actualForeignArities,
       length args == arity ->
       True
@@ -168,7 +168,7 @@ findArities :: ModuleName -> [Bind Ann] -> CodegenEnvironment -> [(T.Text, Int)]
 findArities mn decls (CodegenEnvironment _ explicitArities) foreignExports = Arities arities usedArities actualForeignArities
   where
   actualForeignArities :: M.Map (Qualified Ident) Int
-  actualForeignArities = M.fromList $ map (\(x, n) -> (Qualified (Just mn) (Ident x), n)) foreignExports
+  actualForeignArities = M.fromList $ map (\(x, n) -> (Qualified (P.ByModuleName mn) (Ident x), n)) foreignExports
 
   arities :: M.Map (Qualified Ident) FnArity
   arities =
@@ -203,7 +203,7 @@ findArities mn decls (CodegenEnvironment _ explicitArities) foreignExports = Ari
                 apps'
             Var _ (Qualified q ident)
               | thisModule q ->
-                M.insertWith Set.union (Qualified (Just mn) ident) (Set.singleton $ length args) apps'
+                M.insertWith Set.union (Qualified (P.ByModuleName mn) ident) (Set.singleton $ length args) apps'
             _ -> findUsages' f apps'
     v@Var {} ->
       case v of
@@ -211,7 +211,7 @@ findArities mn decls (CodegenEnvironment _ explicitArities) foreignExports = Ari
         -- Should record separately - or assume that 0 may mean non-0 for this reason?
         Var _ (Qualified q ident)
           | thisModule q ->
-            M.insertWith Set.union (Qualified (Just mn) ident) (Set.singleton 0) apps
+            M.insertWith Set.union (Qualified (P.ByModuleName mn) ident) (Set.singleton 0) apps
         _ -> apps
     Accessor _ _ e -> findUsages' e apps
     ObjectUpdate _ e es -> findUsages' e $ foldr (findUsages' . snd) apps es
@@ -232,8 +232,8 @@ findArities mn decls (CodegenEnvironment _ explicitArities) foreignExports = Ari
       unApp (App _ val arg) args = unApp val (arg : args)
       unApp other args = (other, args)
 
-      thisModule (Just mn') = mn' == mn
-      thisModule Nothing = True
+      thisModule (P.ByModuleName mn') = mn' == mn
+      thisModule (P.BySourcePos _) = True
 
   findUsages'' (NonRec _ _ e) apps = findUsages' e apps
   findUsages'' (Rec binds) apps = foldr (findUsages' . snd) apps binds
@@ -358,14 +358,14 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
             (_, fe, _) = everywhereOnValues id go id
 
             go (App ann (App _ (Var _ apply) f) a)
-              | apply == Qualified dataFunction (Ident C.apply) =
+              | apply == Qualified (P.ByModuleName dataFunction) (Ident C.apply) =
                 App ann f a
             go (App ann (App _ (Var _ apply) a) f)
-              | apply == Qualified dataFunction (Ident C.applyFlipped) =
+              | apply == Qualified (P.ByModuleName dataFunction) (Ident C.applyFlipped) =
                 App ann f a
             go other = other
 
-            dataFunction = Just $ ModuleName "Data.Function"
+            dataFunction = ModuleName "Data.Function"
 
     types :: M.Map (Qualified Ident) SourceType
     types = M.map (\(t, _, _) -> t) $ E.names env
@@ -373,11 +373,11 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
     findAttributes :: [Bind Ann] -> [Erl]
     findAttributes expr = map (uncurry EAttribute) $ mapMaybe getAttribute $ concatMap onBind expr
       where
-        getAttribute (TypeApp _ (TypeApp _ (TypeConstructor _ (Qualified (Just _) (ProperName "Attribute"))) (TypeLevelString _ a)) (TypeLevelString _ b)) =
+        getAttribute (TypeApp _ (TypeApp _ (TypeConstructor _ (Qualified (P.ByModuleName _) (ProperName "Attribute"))) (TypeLevelString _ a)) (TypeLevelString _ b)) =
           Just (a, b)
         getAttribute _ = Nothing
 
-        getType ident = M.lookup (Qualified (Just mn) ident) types
+        getType ident = M.lookup (Qualified (P.ByModuleName mn) ident) types
 
         onRecBind ((_, ident), _) = getType ident
         onBind (NonRec _ ident _) = catMaybes [getType ident]
@@ -389,21 +389,21 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
     reExportForeign :: Ident -> m ([(Atom, Int)], [Erl], Maybe (Ident, EType), ETypeEnv)
     reExportForeign ident = do
       let arity = exportArity ident
-          fullArity = case M.lookup (Qualified (Just mn) ident) arities of
+          fullArity = case M.lookup (Qualified (P.ByModuleName mn) ident) arities of
             Just (Arity (0, n)) -> n
             _ -> arity
           wrapTy (ty', tenv) = case arity of
             0 -> Just (TFun [] ty', tenv)
             _ -> (,tenv) <$> uncurryType arity ty'
 
-          ffiTyEnv = wrapTy . translateType env =<< M.lookup (Qualified (Just mn) ident) types
+          ffiTyEnv = wrapTy . translateType env =<< M.lookup (Qualified (P.ByModuleName mn) ident) types
 
       args <- replicateM fullArity freshNameErl
       let body = EApp RegularApp (EAtomLiteral $ qualifiedToErl' mn ForeignModule ident) (take arity $ map EVar args)
           body' = curriedApp (drop arity $ map EVar args) body
           fun = curriedLambda body' args
       fident <- fmap (Ident . ("f" <>) . T.pack . show) fresh
-      let var = Qualified Nothing fident
+      let var = Qualified P.ByNullSourcePos fident
           wrap e = EBlock [EVarBind (identToVar fident) fun, e]
       (idents, erl, env) <- generateFunctionOverloads Nothing True Nothing (ssAnn nullSourceSpan) ident (Atom Nothing $ runIdent' ident) (Var (ssAnn nullSourceSpan) var) wrap
       let combinedTEnv = M.union env (maybe M.empty snd ffiTyEnv)
@@ -416,7 +416,7 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
 
     checkExport :: Ident -> m ()
     checkExport ident =
-      case (findExport (runIdent' ident), M.lookup (Qualified (Just mn) ident) explicitArities) of
+      case (findExport (runIdent' ident), M.lookup (Qualified (P.ByModuleName mn) ident) explicitArities) of
         -- TODO is it meaningful to check against inferred arities (as we are just now) or only explicit ones
         -- This probably depends on the current codegen
 
@@ -441,10 +441,10 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
     findExport n = snd <$> find ((n ==) . fst) foreignExports
 
     isTopLevelBinding :: Qualified Ident -> Bool
-    isTopLevelBinding (Qualified (Just _) _) = True
-    isTopLevelBinding (Qualified Nothing (InternalIdent (Lazy ident))) = Ident ident `elem` topLevelNames
-    isTopLevelBinding (Qualified Nothing (InternalIdent RuntimeLazyFactory)) = True
-    isTopLevelBinding (Qualified Nothing ident) = ident `elem` topLevelNames
+    isTopLevelBinding (Qualified (P.ByModuleName _) _) = True
+    isTopLevelBinding (Qualified (P.BySourcePos _) (InternalIdent (Lazy ident))) = Ident ident `elem` topLevelNames
+    isTopLevelBinding (Qualified (P.BySourcePos _) (InternalIdent RuntimeLazyFactory)) = True
+    isTopLevelBinding (Qualified (P.BySourcePos _) ident) = ident `elem` topLevelNames
 
     topLevelNames = concatMap topLevelName decls
       where
@@ -491,7 +491,7 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
     generateFunctionOverloads :: Maybe T.Text -> Bool -> Maybe SourceSpan -> Ann -> Ident -> Atom -> Expr Ann -> (Erl -> Erl) -> m ([(Atom, Int)], [Erl], ETypeEnv)
     generateFunctionOverloads lazyVarName isForeign ss eann ident ident' val outerWrapper = do
       -- Always generate the plain curried form, f x y = ... -~~> f() -> fun (X) -> fun (Y) -> ... end end.
-      let qident = Qualified (Just mn) ident
+      let qident = Qualified (P.ByModuleName mn) ident
           replaceLazyCall = everywhereOnErl go
             where
               go (EApp RegularApp lazyFactory [ ])
@@ -511,8 +511,8 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
       -- For effective > 0 (either plain curried funs, FnX or EffectFnX) generate an uncurried overload
       -- f x y = ... -~~> f(X,Y) -> ((...)(X))(Y).
       -- Relying on inlining to clean up some junk here
-      let mkRunApp modName prefix n = App eann (Var eann (Qualified (Just modName) (Ident $ prefix <> T.pack (show n))))
-          applyStep fn a = App eann fn (Var eann (Qualified Nothing (Ident a)))
+      let mkRunApp modName prefix n = App eann (Var eann (Qualified (P.ByModuleName modName) (Ident $ prefix <> T.pack (show n))))
+          applyStep fn a = App eann fn (Var eann (Qualified P.ByNullSourcePos (Ident a)))
 
           countAbs :: Expr Ann -> Int
           countAbs (Abs _ _ e) = 1 + countAbs e
@@ -636,13 +636,13 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
     qualifiedToVar (Qualified _ ident) = identToVar ident
 
     qualifiedToTypeclassCtor :: Qualified Ident -> Atom
-    qualifiedToTypeclassCtor (Qualified (Just mn') ident)
+    qualifiedToTypeclassCtor (Qualified (P.ByModuleName mn') ident)
       -- this case could be always qualified, but is not to assist optimisation
       | mn == mn' =
         Atom Nothing (runIdent' ident)
       | otherwise =
         Atom (Just $ atomModuleName mn' PureScriptModule) (runIdent' ident)
-    qualifiedToTypeclassCtor (Qualified Nothing ident) = Atom Nothing (runIdent' ident)
+    qualifiedToTypeclassCtor (Qualified (P.BySourcePos  _) ident) = Atom Nothing (runIdent' ident)
 
     valueToErl :: Expr Ann -> m Erl
     valueToErl = valueToErl' Nothing
@@ -650,7 +650,7 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
     valueToErl' :: Maybe Ident -> Expr Ann -> m Erl
     valueToErl' _ (Literal (pos, _, _, _) l) =
       rethrowWithPosition pos $ literalToValueErl l
-    valueToErl' _ (Var _ (Qualified (Just C.Prim) (Ident undef)))
+    valueToErl' _ (Var _ (Qualified (P.ByModuleName C.Prim) (Ident undef)))
       | undef == C.undefined =
         return $ EAtomLiteral $ Atom Nothing C.undefined
     valueToErl' _ (Var (_, _, _, Just (IsConstructor _ [])) (Qualified _ ident)) =
@@ -859,7 +859,7 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
     binderVars (NullBinder _) = []
 
     replaceEVars :: [(Ident, Ident)] -> Expr Ann -> Expr Ann
-    replaceEVars vars (Var a (Qualified Nothing x)) | x `notElem` topLevelNames = Var a $ Qualified Nothing $ fromMaybe x $ lookup x vars
+    replaceEVars vars (Var a (Qualified q@(P.BySourcePos  _) x)) | x `notElem` topLevelNames = Var a $ Qualified q $ fromMaybe x $ lookup x vars
     replaceEVars _ z = z
 
     replaceBVars :: [(Ident, Ident)] -> Binder Ann -> Binder Ann
@@ -923,7 +923,7 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
             (ident', scope', vars') <- bindIdent scope vars ident
             Abs ann ident' <$> ensureFreshVars scope' vars' e
           App ann e1 e2 -> App ann <$> go e1 <*> go e2
-          (Var a (Qualified Nothing x)) | x `notElem` topLevelNames -> pure $ Var a $ Qualified Nothing $ fromMaybe x $ M.lookup x vars
+          (Var a (Qualified q@(P.BySourcePos  _) x)) | x `notElem` topLevelNames -> pure $ Var a $ Qualified q $ fromMaybe x $ M.lookup x vars
           otherVar@Var {} -> pure otherVar
           Case ann es cases -> Case ann <$> traverse go es <*> traverse goCase cases
           Let ann binds e -> do
