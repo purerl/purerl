@@ -1,5 +1,5 @@
 -module(dataBounded@ps).
--export([test/0]).
+-export([test3/0, test2/0, test1/0]).
 -compile(nowarn_shadow_vars).
 -compile(nowarn_unused_vars).
 -compile(nowarn_unused_function).
@@ -12,5 +12,9 @@
 -define(MEMOIZE, memoize).
 memoize(X) -> X.
 -endif.
--spec test() -> boolean().
-test() -> true andalso true.
+-spec test3() -> boolean().
+test3() -> true orelse false.
+-spec test2() -> boolean().
+test2() -> false.
+-spec test1() -> boolean().
+test1() -> true.

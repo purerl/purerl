@@ -66,17 +66,17 @@ getTestFiles testDir = do
        else dir
 
 buildSupportModules :: IO ()
-buildSupportModules = withCurrentDirectory "tests/support" $ do 
+buildSupportModules = withCurrentDirectory "tests/support" $ do
   callCommand "spago -q build --deps-only"
 
 compile
   :: [FilePath]
   -> IO ()
-compile inputFiles = withCurrentDirectory "tests/support" $ do 
+compile inputFiles = withCurrentDirectory "tests/support" $ do
     -- Sorting the input files makes some messages (e.g., duplicate module) deterministic
   -- fs <- readInput (sort inputFiles)
   let inputFiles' = (\f -> ".." </> ".." </> f) <$> inputFiles
-  result <- readProcessWithExitCode "spago" ([ "-q", "build", "-p" ] ++ inputFiles') ""
+  result <- readProcessWithExitCode "spago" ([ "-q", "build", "-p" ] ++ intersperse "-p" inputFiles') ""
   case result of
     (ExitSuccess, out, err) -> pure () -- hPutStr outputFile out
     (ExitFailure _, _, err) -> expectationFailure err

@@ -19,6 +19,7 @@ You can edit this file as you like.
   , "maybe"
   , "partial"
   , "prelude"
+  , "transformers"
   ]
 , packages = ./packages.dhall
 , sources = [] : List Text
