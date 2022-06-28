@@ -14,35 +14,49 @@ defaults:
 
 env:
   CI_RELEASE: "${{ github.event_name == 'release' }}"
+  STACK_VERSION: "2.7.5"
 
 jobs:
   build:
     strategy:
       fail-fast: false # do not cancel builds for other OSes if one fails
       matrix:
-        os: [ "ubuntu-18.04", "macOS-10.15", "windows-2016" ]
+        - os: "ubuntu-latest"
+          image: "ghcr.io/purescript/haskell:9.2.3-stretch@sha256:70fd2b6255deb5daa961e6983591a0e21e9ac1e793923bee54aa2cc62e01f867"
+        - os: "macOS-10.15"
+        - os: "windows-2019"
 
     runs-on: "${{ matrix.os }}"
+    container: "${{ matrix.image }}"
 
     steps:
       - uses: "actions/checkout@v2"
 
       - uses: "actions/setup-node@v1"
         with:
-          node-version: "10"
+          node-version: "14"
 
       - id: "haskell"
+        name: "(Non-Linux only) Install Haskell"
+        if: "${{ runner.os != 'Linux' }}"
         uses: "haskell/actions/setup@v1"
         with:
           enable-stack: true
-          stack-version: "2.7.1"
+          stack-version: "${{ env.STACK_VERSION }}"
           stack-no-global: true
+
+      - name: "(Linux only) Check Stack version and fix working directory ownership"
+        if: "${{ runner.os == 'Linux' }}"
+        run: |
+          [ "$(stack --numeric-version)" = "$STACK_VERSION" ]
+          chown root:root .
 
       - uses: "actions/cache@v2"
         with:
           path: |
+            /root/.stack
             ${{ steps.haskell.outputs.stack-root }}
-          key: "${{ runner.os }}-${{ hashFiles('stack.yaml') }}"
+          key: "${{ runner.os }}-MdyPsf-${{ hashFiles('stack.yaml') }}"
 
       - name: "(Windows only) Configure Stack to store its programs in STACK_ROOT"
         # This ensures that the local GHC and MSYS binaries that Stack installs
