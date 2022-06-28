@@ -19,9 +19,12 @@ set -ex
 # for compilation or for tests in our package.yaml file (these sorts of issues
 # don't test to get noticed until after releasing otherwise).
 
+(echo "::group::Initialize variables") 2>/dev/null
+
 STACK="stack --no-terminal --jobs=2"
 
-STACK_OPTS="--test"
+# Disable until deps are set up
+# STACK_OPTS="--test"
 if [ "$CI_RELEASE" = "true" ]
 then
   STACK_OPTS="$STACK_OPTS --flag=purerl:RELEASE"
@@ -29,13 +32,22 @@ else
   STACK_OPTS="$STACK_OPTS --fast"
 fi
 
+(echo "::endgroup::"; echo "::group::Install snapshot dependencies") 2>/dev/null
+
 # Install snapshot dependencies (since these will be cached globally and thus
 # can be reused during the sdist build step)
 $STACK build --only-snapshot $STACK_OPTS
 
+(echo "::endgroup::"; echo "::group::Build source distributions") 2>/dev/null
+
 # Test in a source distribution (see above)
 $STACK sdist --tar-dir sdist-test;
 tar -xzf sdist-test/purerl-*.tar.gz -C sdist-test --strip-components=1
+
+(echo "::endgroup::"; echo "::group::Build and test purerl") 2>/dev/null
+
 pushd sdist-test
 $STACK build --pedantic $STACK_OPTS
 popd
+
+(echo "::endgroup::") 2>/dev/null

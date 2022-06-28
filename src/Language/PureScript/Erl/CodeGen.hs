@@ -89,6 +89,7 @@ import Language.PureScript.Types
 import Prelude.Compat
 import Language.PureScript.Erl.CodeGen.Types (ETypeEnv, uncurriedFnTypes, replaceVars, translateType, uncurryType)
 import Language.PureScript.CoreFn.Laziness (applyLazinessTransform)
+import Language.PureScript (internalError)
 
 identToTypeclassCtor :: Ident -> Atom
 identToTypeclassCtor a = Atom Nothing (runIdent' a)
@@ -330,7 +331,10 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
 
     safeDecls <- concat <$> traverse (typecheckWrapper mn) erlDecls
 
-    let safeExports = map (\(EFunctionDef _ _ fnName args _) -> (fnName, length args)) safeDecls
+
+    let fnl (EFunctionDef _ _ fnName args _) = Just (fnName, length args)
+        fnl _ = Nothing
+        safeExports = mapMaybe fnl safeDecls
 
         memoizable =
           M.mapKeys (qualifiedToErl mn) $
@@ -813,7 +817,9 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
           let (_, replaceExpVars, replaceBinderVars) = everywhereOnValues id (replaceEVars (zip vars newVars)) (replaceBVars (zip vars newVars))
 
           let binders'' = map replaceBinderVars binders'
-              (Case _ [] [CaseAlternative [] alt']) = replaceExpVars (Case (nullSourceSpan, [], Nothing, Nothing) [] [CaseAlternative [] alt])
+              alt' = case replaceExpVars (Case (nullSourceSpan, [], Nothing, Nothing) [] [CaseAlternative [] alt]) of
+                        Case _ [] [CaseAlternative [] alt'] -> alt'
+                        _ -> internalError "Replacing variables should give the same form back"
 
 
           (bs, binderContext) :: ([Erl], [((EFunBinder, [Erl]) -> Erl, (T.Text, Erl))]) <- second concat . unzip <$> mapM binderToErl' binders''

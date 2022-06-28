@@ -2,7 +2,7 @@ name: "CI"
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "ci" ]
   pull_request:
     branches: [ "master" ]
   release:
@@ -23,7 +23,7 @@ jobs:
       matrix:
         include:
         - os: "ubuntu-latest"
-          image: "ghcr.io/purescript/haskell:9.2.3-stretch@sha256:70fd2b6255deb5daa961e6983591a0e21e9ac1e793923bee54aa2cc62e01f867"
+          image: "ghcr.io/purefunctor/haskell:9.2.3-stretch@sha256:70fd2b6255deb5daa961e6983591a0e21e9ac1e793923bee54aa2cc62e01f867"
         - os: "macOS-10.15"
         - os: "windows-2019"
 
@@ -31,6 +31,15 @@ jobs:
     container: "${{ matrix.image }}"
 
     steps:
+      - # We need a proper Git repository, but the checkout step will unpack a tarball instead of doing a clone
+        # if the Git version is less than 2.18.
+        name: "(Linux only) Install a newer version of Git"
+        if: "${{ runner.os == 'Linux' }}"
+        run: |
+          . /etc/os-release
+          echo deb http://deb.debian.org/debian "$VERSION_CODENAME"-backports main >> /etc/apt/sources.list
+          apt-get update && apt-get install -y git/"$VERSION_CODENAME"-backports
+
       - uses: "actions/checkout@v2"
 
       - uses: "actions/setup-node@v1"
@@ -72,7 +81,7 @@ jobs:
       #   env:
       #     VERSION: "2.2.11"
 
-      - run: "ci/build.sh"
+      - run: "ci/fix-home.sh ci/build.sh"
 
       - name: "(Release only) Create bundle"
         if: "${{ env.CI_RELEASE == 'true' }}"
@@ -90,7 +99,7 @@ jobs:
               exit 1;;
           esac
           cd sdist-test
-          bundle/build.sh "$bundle_os"
+          ../ci/fix-home.sh bundle/build.sh "$bundle_os"
 
       - name: "(Release only) Publish bundle"
         if: "${{ env.CI_RELEASE == 'true' }}"

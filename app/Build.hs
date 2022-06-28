@@ -28,7 +28,7 @@ import Data.Either (isLeft, partitionEithers)
 import qualified Data.Aeson.KeyMap as Json.Map
 import Data.Map (Map)
 import qualified Data.Map as M
-import Data.Maybe (catMaybes, fromMaybe, isNothing, mapMaybe, maybeToList)
+import Data.Maybe (catMaybes, fromMaybe, isNothing, mapMaybe, maybeToList, fromJust)
 import qualified Data.Text as T
 import Data.Time.Clock (UTCTime)
 import Data.Traversable (for)
@@ -128,7 +128,7 @@ compile' BuildOptions {..} = do
 
       let fromCorefn = case res of
             Just res' -> do
-              let Just sourceFile = getModulePath res'
+              let sourceFile = fromJust $ getModulePath res'
               exists <- liftIO $ doesFileExist sourceFile
               if not exists
                 then
