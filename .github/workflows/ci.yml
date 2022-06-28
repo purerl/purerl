@@ -21,6 +21,7 @@ jobs:
     strategy:
       fail-fast: false # do not cancel builds for other OSes if one fails
       matrix:
+        include:
         - os: "ubuntu-latest"
           image: "ghcr.io/purescript/haskell:9.2.3-stretch@sha256:70fd2b6255deb5daa961e6983591a0e21e9ac1e793923bee54aa2cc62e01f867"
         - os: "macOS-10.15"
