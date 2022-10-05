@@ -98,6 +98,8 @@ compile' BuildOptions {..} = do
   let coreFnGlob = joinPath [buildOutputDir, "*", "corefn.json"]
       cacheDbFile = joinPath [buildOutputDir, "purerl-cache-db.json"]
   corefnFiles <- globWarningOnMisses warnFileTypeNotFound [coreFnGlob]
+  cwd <- liftBase getCurrentDirectory
+
   when (null corefnFiles) $ do
     hPutStr stderr $
       unlines
@@ -217,8 +219,8 @@ compile' BuildOptions {..} = do
           exitFailure
 
         pure $ catMaybes $ hush <$> res
-    
-    let newCache :: CacheDb = M.fromList $ map (\(ModResult {moduleName, modulePath}, (ci, _)) -> (moduleName, CacheInfo modulePath ci)) buildInfo
+
+    let newCache :: CacheDb = M.fromList $ map (\(ModResult {moduleName, modulePath}, (ci, _)) -> (moduleName, CacheInfo (Cache.normaliseForCache cwd modulePath) ci)) buildInfo
     MM.writeJSONFile cacheDbFile newCache
 
     pure makeRes
