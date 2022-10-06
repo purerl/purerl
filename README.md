@@ -7,7 +7,8 @@ PureScript is a small strongly typed programming language with expressive types,
 # Resources
 
 - [PureScript discord](https://discord.gg/jNh7FxhcAj) channel `#purerl` - general discussion, support, news
-- [purerl Pursuit](https://pursuit.purerl.fun/) - a version of the PureScript pursuit documentation repository for purerl package sets
+- [purerl API docs](https://purerl.github.io/package-sets/index.html) - API docs generated from the latest package set
+  - ~~[purerl Pursuit](https://pursuit.purerl.fun/) - a version of the PureScript pursuit documentation repository for purerl package sets~~ (no longer being kept up to date)
 - The [purerl](https://github.com/purerl) organisation hosts ports of some core libraries.
 
 # Versions
