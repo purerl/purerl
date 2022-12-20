@@ -30,7 +30,7 @@ import Data.Traversable (forM)
 import Debug.Trace (traceM)
 import qualified Language.PureScript as P
 import Language.PureScript.AST (SourceSpan, nullSourceSpan)
-import qualified Language.PureScript.Constants.Prelude as C
+import qualified Language.PureScript.Constants.Libs as C
 import qualified Language.PureScript.Constants.Prim as C
 import Language.PureScript.CoreFn
   ( Ann,
@@ -362,14 +362,10 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
             (_, fe, _) = everywhereOnValues id go id
 
             go (App ann (App _ (Var _ apply) f) a)
-              | apply == Qualified (P.ByModuleName dataFunction) (Ident C.apply) =
-                App ann f a
+              | C.I_functionApply <- apply = App ann f a
             go (App ann (App _ (Var _ apply) a) f)
-              | apply == Qualified (P.ByModuleName dataFunction) (Ident C.applyFlipped) =
-                App ann f a
+              | C.I_functionApplyFlipped <- apply = App ann f a
             go other = other
-
-            dataFunction = ModuleName "Data.Function"
 
     types :: M.Map (Qualified Ident) SourceType
     types = M.map (\(t, _, _) -> t) $ E.names env
@@ -558,12 +554,12 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
       (res1, res2) <- case effFnArity qident <|> fnArity qident <|> M.lookup qident arities <|> lazyArity ident of
         Just (EffFnXArity arity) -> do
           vars <- replicateM arity freshNameErl
-          erl' <- valueToErl $ foldl applyStep (mkRunApp effectUncurried C.runEffectFn arity val) vars
+          erl' <- valueToErl $ foldl applyStep (mkRunApp effectUncurried (snd C.P_runEffectFn) arity val) vars
           pure $ curried <> ([(ident', arity)], [EFunctionDef (uncurryType arity =<< erlangType) ss ident' vars (outerWrapper (EApp RegularApp erl' []))])
         Just (FnXArity arity) -> do
           -- Same as above
           vars <- replicateM arity freshNameErl
-          erl' <- valueToErl $ foldl applyStep (mkRunApp dataFunctionUncurried C.runFn arity val) vars
+          erl' <- valueToErl $ foldl applyStep (mkRunApp dataFunctionUncurried (snd C.P_runFn) arity val) vars
           pure $ curried <> ([(ident', arity)], [EFunctionDef (uncurryType arity =<< erlangType) ss ident' vars (outerWrapper erl')])
         Just (Arity (n, m)) | n + m > 0 ->
           do
@@ -654,9 +650,9 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
     valueToErl' :: Maybe Ident -> Expr Ann -> m Erl
     valueToErl' _ (Literal (pos, _, _, _) l) =
       rethrowWithPosition pos $ literalToValueErl l
-    valueToErl' _ (Var _ (Qualified (P.ByModuleName C.Prim) (Ident undef)))
-      | undef == C.undefined =
-        return $ EAtomLiteral $ Atom Nothing C.undefined
+    valueToErl' _ (Var _ (Qualified (P.ByModuleName C.M_Prim) (Ident undef)))
+      | undef == C.S_undefined =
+        return $ EAtomLiteral $ Atom Nothing C.S_undefined
     valueToErl' _ (Var (_, _, _, Just (IsConstructor _ [])) (Qualified _ ident)) =
       return $ constructorLiteral (runIdent' ident) []
     valueToErl' _ (Var _ ident) | isTopLevelBinding ident = pure $

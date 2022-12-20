@@ -1,26 +1,26 @@
-resolver: nightly-2022-06-09
+resolver: nightly-2022-11-12
 pvp-bounds: both
 packages:
-- .
+  - .
 extra-deps:
-- language-javascript-0.7.0.0
-- github: purescript/purescript
-  commit: v0.15.3
-# Fix issue with libtinfo.
-# See https://github.com/purescript/purescript/issues/4253
-- process-1.6.13.1
+  - language-javascript-0.7.0.0
+  - github: purescript/purescript
+    commit: v0.15.7
+  # Fix issue with libtinfo.
+  # See https://github.com/purescript/purescript/issues/4253
+  - process-1.6.13.1
 
-# The Cabal library is not in Stackage
-- Cabal-3.6.3.0
-# Protolude is not yet in resolver snapshot
-- protolude-0.3.1
-# hspec@2.9.3 is the first version that starts depending on ghc
-# ghc depends on terminfo by default, but that can be ignored
-# if one uses the '-terminfo' flag.
-# Unfortunately, hspec doesn't expose a similar flag.
-- hspec-2.9.2
-- hspec-core-2.9.2
-- hspec-discover-2.9.2
+  # The Cabal library is not in Stackage
+  - Cabal-3.6.3.0
+  # Protolude is not yet in resolver snapshot
+  - protolude-0.3.1
+  # hspec@2.9.3 is the first version that starts depending on ghc
+  # ghc depends on terminfo by default, but that can be ignored
+  # if one uses the '-terminfo' flag.
+  # Unfortunately, hspec doesn't expose a similar flag.
+  - hspec-2.9.2
+  - hspec-core-2.9.2
+  - hspec-discover-2.9.2
 flags:
   aeson-pretty:
     lib-only: true

@@ -1,7 +1,8 @@
 name: purerl
-version: '0.0.17'
+version: "0.0.19"
 synopsis: PureScript Programming Language Erlang Back-end
-description: Erlang backend for PureScript (a small strongly, statically typed programming language with expressive
+description:
+  Erlang backend for PureScript (a small strongly, statically typed programming language with expressive
   types, inspired by Haskell).
 category: Language
 author: Nicholas Wolverson <nicholas.wolverson@gmail.com>
@@ -18,8 +19,8 @@ extra-source-files:
   - CONTRIBUTORS.md
   - CONTRIBUTING.md
 dependencies:
-  - aeson 
-  - aeson-better-errors 
+  - aeson
+  - aeson-better-errors
   - aeson-pretty
   - ansi-terminal
   - base
@@ -33,6 +34,7 @@ dependencies:
   - filepath
   - Glob
   - haskeline
+  - lens
   - monad-control
   - mtl
   - parsec
@@ -51,6 +53,7 @@ dependencies:
   - unordered-containers
   - utf8-string
   - vector
+  - witherable
 build-tools:
   - happy:happy ==1.20.0
 
@@ -70,12 +73,12 @@ executables:
       - optparse-applicative
       - purerl
     when:
-    - condition: flag(release)
-      then:
-        cpp-options: -DRELEASE
-      else:
-        dependencies:
-        - gitrev >=1.2.0 && <1.4
+      - condition: flag(release)
+        then:
+          cpp-options: -DRELEASE
+        else:
+          dependencies:
+            - gitrev >=1.2.0 && <1.4
 
 tests:
   tests:
@@ -114,8 +117,8 @@ default-extensions:
 flags:
   release:
     description: >
-        Mark this build as a release build: prevents inclusion of extra
-        info e.g. commit SHA in --version output)
+      Mark this build as a release build: prevents inclusion of extra
+      info e.g. commit SHA in --version output)
     manual: false
     default: false
 
