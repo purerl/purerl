@@ -23,7 +23,7 @@ jobs:
       matrix:
         include:
         - os: "ubuntu-latest"
-          image: "ghcr.io/purefunctor/haskell:9.2.3-stretch@sha256:70fd2b6255deb5daa961e6983591a0e21e9ac1e793923bee54aa2cc62e01f867"
+          image: "haskell:9.2.4@sha256:dceec00f8ad896c327c2b5c77ba91c9824bf3e26a837f538ccfb80fb379dc52f"
         - os: "macOS-10.15"
         - os: "windows-2019"
 
