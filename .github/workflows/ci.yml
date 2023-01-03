@@ -14,7 +14,7 @@ defaults:
 
 env:
   CI_RELEASE: "${{ github.event_name == 'release' }}"
-  STACK_VERSION: "2.7.5"
+  STACK_VERSION: "2.9.1"
 
 jobs:
   build:
