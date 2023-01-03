@@ -7,7 +7,7 @@ module Language.PureScript.Erl.CodeGen.Optimizer.MagicDo (magicDo) where
 
 import Data.Bifunctor (Bifunctor (second))
 import Data.Text (Text)
-import qualified Language.PureScript.Constants.Prelude as C
+import qualified Language.PureScript.Constants.Libs as C
 import Language.PureScript.Erl.CodeGen.AST
 import qualified Language.PureScript.Erl.CodeGen.Constants as EC
 import Language.PureScript.Erl.CodeGen.Optimizer.Common
@@ -67,7 +67,7 @@ magicDo'' effectModule EC.EffectDictionaries {..} expander =
     convert other = other
 
     isDiscard fn dict1 dict2 =
-      isDict (EC.controlBind, C.discardUnitDictionary) dict1
+      isDict (EC.controlBind, snd C.P_discardUnit) dict1
         && isDict (effectModule, edBindDict) dict2
         && isDiscardPoly fn
 
@@ -81,13 +81,13 @@ magicDo'' effectModule EC.EffectDictionaries {..} expander =
     isMap fn dict = isDict (effectModule, edFunctor) dict && isMapPoly fn
 
     -- Check if an expression represents the polymorphic >>= function
-    isBindPoly = isUncurriedFn (EC.controlBind, C.bind) . unthunk
+    isBindPoly = isUncurriedFn (EC.controlBind, C.S_bind) . unthunk
     -- Check if an expression represents the polymorphic pure or return function
-    isPurePoly = isUncurriedFn (EC.controlApplicative, C.pure') . unthunk
+    isPurePoly = isUncurriedFn (EC.controlApplicative, C.S_pure) . unthunk
     -- Check if an expression represents the polymorphic discard function
-    isDiscardPoly = isUncurriedFn (EC.controlBind, C.discard) . unthunk
+    isDiscardPoly = isUncurriedFn (EC.controlBind, C.S_discard) . unthunk
     -- Check if an expression represents the polymorphic map function
-    isMapPoly = isUncurriedFn (EC.dataFunctor, C.map) . unthunk
+    isMapPoly = isUncurriedFn (EC.dataFunctor, C.S_map) . unthunk
 
     unthunk (EApp _ fn []) = fn
     unthunk fn = fn

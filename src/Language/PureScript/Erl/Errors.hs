@@ -4,12 +4,11 @@ module Language.PureScript.Erl.Errors
   ( module Language.PureScript.Erl.Errors
   ) where
 
-import           Prelude.Compat
-import           Protolude (ordNub)
+import Prelude
+import Protolude (ordNub)
 
 import           Control.Arrow ((&&&))
 import           Control.Monad.Error.Class (MonadError(..))
-import Control.Monad.Trans.State.Lazy ( evalState, get )
 import Control.Monad.Writer
     ( unless,
       forM,
@@ -17,20 +16,27 @@ import Control.Monad.Writer
       censor,
       MonadWriter(tell, listen) )
 import           Control.Exception (displayException)
+import           Control.Lens (both, head1, over)
+import           Control.Monad.Trans.State.Lazy
 import           Data.Char (isSpace)
+import           Data.Containers.ListUtils (nubOrdOn)
 import           Data.Either (partitionEithers)
 import           Data.Foldable (fold)
-import           Data.List (nubBy, partition, dropWhileEnd, sort, sortOn)
+import           Data.Function (on)
+import           Data.Functor (($>))
+import           Data.List (nubBy, partition, dropWhileEnd, sortOn, uncons)
 import qualified Data.List.NonEmpty as NEL
-import           Data.Maybe (fromMaybe, mapMaybe)
+import           Data.List.NonEmpty (NonEmpty((:|)))
+import           Data.Maybe (fromMaybe, mapMaybe, isJust)
 import qualified Data.Map as M
+import           Data.Ord (Down(..))
 import qualified Data.Text as T
 import           Data.Text (Text)
+import           Data.Traversable (for)
 import           Language.PureScript.AST (ErrorMessageHint(..), HintCategory(..), DeclarationRef(..), ImportDeclarationType(..), Expr(..))
 import           Language.PureScript.AST.SourcePos
 import qualified Language.PureScript.Constants.Prim as C
 import Language.PureScript.Crash ( internalError )
-import Language.PureScript.Environment ( primSubName )
 import           Language.PureScript.Label (Label(..))
 import Language.PureScript.Names
     ( ModuleName,
@@ -49,7 +55,7 @@ import           Language.PureScript.Errors (prettyPrintRef)
 import           Language.PureScript.Pretty.Common (endWith)
 import           Language.PureScript.PSString (decodeStringWithReplacement)
 import Language.PureScript.Types
-    ( Type(TypeConstructor, RCons, TypeLevelString, TypeApp),
+    ( Type(TypeConstructor, RCons, TypeLevelString, TypeApp, KindApp),
       eqType,
       rowFromList,
       rowToList,
@@ -58,10 +64,12 @@ import Language.PureScript.Types
 import Language.PureScript.Erl.Errors.Types
     ( ErrorMessage(..), SimpleErrorMessage(..) )
 import qualified System.Console.ANSI as ANSI
+import           System.FilePath (makeRelative)
 import qualified Text.Parsec as P
 import qualified Text.Parsec.Error as PE
 import           Text.Parsec.Error (Message(..))
 import qualified Text.PrettyPrint.Boxes as Box
+import           Witherable (wither)
 
 newtype ErrorSuggestion = ErrorSuggestion Text
 
@@ -126,10 +134,9 @@ errorMessage'' sss err = MultipleErrors [ErrorMessage [PositionedError sss] err]
 -- | Create an error from multiple (possibly empty) source spans, reversed sorted.
 errorMessage''' :: [SourceSpan] -> SimpleErrorMessage -> MultipleErrors
 errorMessage''' sss err =
-  maybe (errorMessage err) (`errorMessage''` err)
+  maybe (errorMessage err) (flip errorMessage'' err)
     . NEL.nonEmpty
-    . reverse
-    . sort
+    . sortOn Down
     $ filter (/= NullSourceSpan) sss
 
 -- | Create an error set from a single error message
@@ -210,6 +217,7 @@ data PPEOptions = PPEOptions
   , ppeLevel             :: Level -- ^ Should this report an error or a warning?
   , ppeShowDocs          :: Bool -- ^ Should show a link to error message's doc page?
   , ppeRelativeDirectory :: FilePath -- ^ FilePath to which the errors are relative
+  , ppeFileContents      :: [(FilePath, Text)] -- ^ Unparsed contents of source files
   }
 
 -- | Default options for PPEOptions
@@ -220,11 +228,12 @@ defaultPPEOptions = PPEOptions
   , ppeLevel             = Error
   , ppeShowDocs          = True
   , ppeRelativeDirectory = mempty
+  , ppeFileContents      = []
   }
 
 -- | Pretty print a single error, simplifying if necessary
 prettyPrintSingleError :: PPEOptions -> ErrorMessage -> Box.Box
-prettyPrintSingleError (PPEOptions codeColor full _level _showDocs relPath) e = flip evalState defaultUnknownMap $ do
+prettyPrintSingleError (PPEOptions codeColor full _level _showDocs relPath fileContents) e = flip evalState defaultUnknownMap $ do
   let em = if full then e else simplifyErrorMessage e
   um <- get
   return (prettyPrintErrorMessage um em)
@@ -458,6 +467,11 @@ prettyPrintSingleError (PPEOptions codeColor full _level _showDocs relPath) e = 
       paras [ line $ "at " <> displaySourceSpan relPath (NEL.head srcSpan)
             , detail
             ]
+    renderHint (RelatedPositions srcSpans) detail =
+      paras
+        [ detail
+        , Box.moveRight 2 $ showSourceSpansInContext srcSpans
+        ]
 
     printRow :: (Int -> Type a -> Box.Box) -> Type a -> Box.Box
     printRow f t = markCodeBox $ indent $ f prettyDepth t
@@ -490,7 +504,7 @@ prettyPrintSingleError (PPEOptions codeColor full _level _showDocs relPath) e = 
   prettyDepth | full = 1000
               | otherwise = 3
 
-  paras :: [Box.Box] -> Box.Box
+  paras :: forall f. Foldable f => f Box.Box -> Box.Box
   paras = Box.vcat Box.left
 
   -- | Simplify an error message
@@ -523,7 +537,106 @@ prettyPrintSingleError (PPEOptions codeColor full _level _showDocs relPath) e = 
   hintCategory ErrorCheckingKind{}                  = CheckHint
   hintCategory ErrorSolvingConstraint{}             = SolverHint
   hintCategory PositionedError{}                    = PositionHint
+  hintCategory ErrorInDataConstructor{}             = DeclarationHint
+  hintCategory ErrorInTypeConstructor{}             = DeclarationHint
+  hintCategory ErrorInBindingGroup{}                = DeclarationHint
+  hintCategory ErrorInDataBindingGroup{}            = DeclarationHint
+  hintCategory ErrorInTypeSynonym{}                 = DeclarationHint
+  hintCategory ErrorInValueDeclaration{}            = DeclarationHint
+  hintCategory ErrorInTypeDeclaration{}             = DeclarationHint
+  hintCategory ErrorInTypeClassDeclaration{}        = DeclarationHint
+  hintCategory ErrorInKindDeclaration{}             = DeclarationHint
+  hintCategory ErrorInRoleDeclaration{}             = DeclarationHint
+  hintCategory ErrorInForeignImport{}               = DeclarationHint
   hintCategory _                                    = OtherHint
+
+  -- | As of this writing, this function assumes that all provided SourceSpans
+  -- are non-overlapping (except for exact duplicates) and span no line breaks. A
+  -- more sophisticated implementation without this limitation would be possible
+  -- but isn't yet needed.
+  showSourceSpansInContext :: NonEmpty SourceSpan -> Box.Box
+  showSourceSpansInContext
+    = maybe Box.nullBox (paras . fmap renderFile . NEL.groupWith1 spanName . NEL.sort)
+    . NEL.nonEmpty
+    . NEL.filter ((> 0) . sourcePosLine . spanStart)
+    where
+    renderFile :: NonEmpty SourceSpan -> Box.Box
+    renderFile sss = maybe Box.nullBox (linesToBox . T.lines) $ lookup fileName fileContents
+      where
+      fileName = spanName $ NEL.head sss
+      header = lineS . (<> ":") . makeRelative relPath $ fileName
+      lineBlocks = makeLineBlocks $ NEL.groupWith1 (sourcePosLine . spanStart) sss
+
+      linesToBox fileLines = Box.moveUp 1 $ header Box.// body
+        where
+        body
+          = Box.punctuateV Box.left (lineNumberStyle "...")
+          . map (paras . fmap renderLine)
+          . flip evalState (fileLines, 1)
+          . traverse (wither (\(i, x) -> fmap (i, , x) <$> ascLookupInState i) . NEL.toList)
+          $ NEL.toList lineBlocks
+
+    makeLineBlocks :: NonEmpty (NonEmpty SourceSpan) -> NonEmpty (NonEmpty (Int, [SourceSpan]))
+    makeLineBlocks = startBlock
+      where
+      startBlock (h :| t) = over head1 (NEL.cons (pred $ headLineNumber h, [])) $ continueBlock h t
+
+      continueBlock :: NonEmpty SourceSpan -> [NonEmpty SourceSpan] -> NonEmpty (NonEmpty (Int, [SourceSpan]))
+      continueBlock lineGroup = \case
+        [] ->
+          endBlock lineGroup []
+        nextGroup : groups -> case pred $ ((-) `on` headLineNumber) nextGroup lineGroup of
+          n | n <= 3 ->
+            over head1 (appendExtraLines n lineGroup <>) $ continueBlock nextGroup groups
+          _ ->
+            endBlock lineGroup . NEL.toList . startBlock $ nextGroup :| groups
+
+      endBlock :: NonEmpty SourceSpan -> [NonEmpty (Int, [SourceSpan])] -> NonEmpty (NonEmpty (Int, [SourceSpan]))
+      endBlock h t = appendExtraLines 1 h :| t
+
+      headLineNumber = sourcePosLine . spanStart . NEL.head
+
+      appendExtraLines :: Int -> NonEmpty SourceSpan -> NonEmpty (Int, [SourceSpan])
+      appendExtraLines n lineGroup = (lineNum, NEL.toList lineGroup) :| [(lineNum + i, []) | i <- [1..n]]
+        where
+        lineNum = headLineNumber lineGroup
+
+    renderLine :: (Int, Text, [SourceSpan]) -> Box.Box
+    renderLine (lineNum, text, sss) = numBox Box.<+> lineBox
+      where
+      colSpans = nubOrdOn fst $ map (over both (pred . sourcePosColumn) . (spanStart &&& spanEnd)) sss
+      numBox = lineNumberStyle $ show lineNum
+      lineBox =
+        if isJust codeColor
+        then colorCodeBox codeColor $ line $ foldr highlightSpan text colSpans
+        else line text Box.// line (finishUnderline $ foldr underlineSpan (T.length text, "") colSpans)
+
+    highlightSpan :: (Int, Int) -> Text -> Text
+    highlightSpan (startCol, endCol) text
+       = prefix
+      <> T.pack (ANSI.setSGRCode [ANSI.SetSwapForegroundBackground True])
+      <> spanText
+      <> T.pack (ANSI.setSGRCode [ANSI.SetSwapForegroundBackground False])
+      <> suffix
+      where
+      (prefix, rest) = T.splitAt startCol text
+      (spanText, suffix) = T.splitAt (endCol - startCol) rest
+
+    underlineSpan :: (Int, Int) -> (Int, Text) -> (Int, Text)
+    underlineSpan (startCol, endCol) (len, accum) = (startCol, T.replicate (endCol - startCol) "^" <> T.replicate (len - endCol) " " <> accum)
+
+    finishUnderline :: (Int, Text) -> Text
+    finishUnderline (len, accum) = T.replicate len " " <> accum
+
+    lineNumberStyle :: String -> Box.Box
+    lineNumberStyle = colorCodeBox (codeColor $> (ANSI.Vivid, ANSI.Black)) . Box.alignHoriz Box.right 5 . lineS
+
+  -- | Lookup the nth element of a list, but without retraversing the list every
+  -- time, by instead keeping a tail of the list and the current element number
+  -- in State. Only works if the argument provided is strictly ascending over
+  -- the life of the State.
+  ascLookupInState :: forall a. Int -> State ([a], Int) (Maybe a)
+  ascLookupInState j = get >>= \(as, i) -> for (uncons $ drop (j - i) as) $ \(a, as') -> put (as', succ j) $> a
 
 -- Pretty print and export declaration
 prettyPrintExport :: DeclarationRef -> Text
@@ -643,18 +756,16 @@ renderBox = unlines
 toTypelevelString :: Type a -> Maybe Box.Box
 toTypelevelString (TypeLevelString _ s) =
   Just . Box.text $ decodeStringWithReplacement s
-toTypelevelString (TypeApp _ (TypeConstructor _ f) x)
-  | f == primSubName C.typeError "Text" = toTypelevelString x
-toTypelevelString (TypeApp _ (TypeConstructor _ f) x)
-  | f == primSubName C.typeError "Quote" = Just (typeAsBox maxBound x)
-toTypelevelString (TypeApp _ (TypeConstructor _ f) (TypeLevelString _ x))
-  | f == primSubName C.typeError "QuoteLabel" = Just . line . prettyPrintLabel . Label $ x
-toTypelevelString (TypeApp _ (TypeApp _ (TypeConstructor _ f) x) ret)
-  | f == primSubName C.typeError "Beside" =
-    (Box.<>) <$> toTypelevelString x <*> toTypelevelString ret
-toTypelevelString (TypeApp _ (TypeApp _ (TypeConstructor _ f) x) ret)
-  | f == primSubName C.typeError "Above" =
-    (Box.//) <$> toTypelevelString x <*> toTypelevelString ret
+toTypelevelString (TypeApp _ (TypeConstructor _ C.Text) x) =
+  toTypelevelString x
+toTypelevelString (TypeApp _ (KindApp _ (TypeConstructor _ C.Quote) _) x) =
+  Just (typeAsBox maxBound x)
+toTypelevelString (TypeApp _ (TypeConstructor _ C.QuoteLabel) (TypeLevelString _ x)) =
+  Just . line . prettyPrintLabel . Label $ x
+toTypelevelString (TypeApp _ (TypeApp _ (TypeConstructor _ C.Beside) x) ret) =
+  (Box.<>) <$> toTypelevelString x <*> toTypelevelString ret
+toTypelevelString (TypeApp _ (TypeApp _ (TypeConstructor _ C.Above) x) ret) =
+  (Box.//) <$> toTypelevelString x <*> toTypelevelString ret
 toTypelevelString _ = Nothing
 
 -- | Rethrow an error with a more detailed error message in the case of failure

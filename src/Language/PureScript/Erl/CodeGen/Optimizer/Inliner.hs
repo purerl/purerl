@@ -20,8 +20,8 @@ import qualified Data.Set as Set
 import Data.String (IsString)
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Language.PureScript.Constants.Prelude as C
 import qualified Language.PureScript.Constants.Prim as C
+import qualified Language.PureScript.Constants.Libs as C
 import Language.PureScript.Erl.CodeGen.AST
 import Language.PureScript.Erl.CodeGen.Common (atomPS, runAtom)
 import qualified Language.PureScript.Erl.CodeGen.Constants as EC
@@ -144,10 +144,10 @@ inlineCommonValues expander = everywhereOnErl convert
       | isFn (EC.erlDataListTypes, EC.nil) fn = EListLiteral []
     convert other = other
 
-    fnZero = (EC.dataSemiring, C.zero)
-    fnOne = (EC.dataSemiring, C.one)
-    fnBottom = (EC.dataBounded, C.bottom)
-    fnTop = (EC.dataBounded, C.top)
+    fnZero = (EC.dataSemiring, snd $ C.P_zero)
+    fnOne = (EC.dataSemiring, snd $ C.P_one)
+    fnBottom = (EC.dataBounded, snd $ C.P_bottom)
+    fnTop = (EC.dataBounded, snd $ C.P_top)
 
 data Binary
   = Binary (Text, PSString) (Text, PSString) BinaryOperator
@@ -250,7 +250,7 @@ inlineCommonOperators effectModule EC.EffectDictionaries {..} expander =
         convert (EApp _ fn [undef, x]) | isUndef undef && isFnName fns fn = f x
         convert other = other
 
-        isUndef (EAtomLiteral atom) | runAtom atom == C.undefined = True
+        isUndef (EAtomLiteral atom) | runAtom atom == C.S_undefined = True
         isUndef _ = False
 
     binaryUndefTC2Fn :: (Text, PSString) -> (Erl -> Erl -> Erl) -> Erl -> Erl
@@ -261,7 +261,7 @@ inlineCommonOperators effectModule EC.EffectDictionaries {..} expander =
         convert (EApp _ fn [undef, undef', x, y]) | isUndef undef && isUndef undef' && isFnName fns fn = f x y
         convert other = other
 
-        isUndef (EAtomLiteral atom) | runAtom atom == C.undefined = True
+        isUndef (EAtomLiteral atom) | runAtom atom == C.S_undefined = True
         isUndef _ = False
 
     inlineNonClassFunction :: (Text, Text) -> (Erl -> Erl -> Erl) -> Erl -> Erl
@@ -298,11 +298,11 @@ inlineCommonOperators effectModule EC.EffectDictionaries {..} expander =
       where
         go eApp@EApp {} = case eApp of
           (collect 2 . expander -> EApp meta fn [dict1, dict2])
-            | isDict (EC.controlBind, EC.discardUnit) dict1 && isFn (EC.controlBind, C.discard) fn ->
+            | isDict (EC.controlBind, EC.discardUnit) dict1 && isFn (EC.controlBind, snd $ C.P_discard) fn ->
               EApp meta controlBindBind [dict2]
           _ -> eApp
         go other = other
-        controlBindBind = EAtomLiteral (Atom (Just EC.controlBind) C.bind)
+        controlBindBind = EAtomLiteral (Atom (Just EC.controlBind) C.S_bind)
 
 binaryOps :: (Erl -> Erl) -> Erl -> Erl
 binaryOps expander = \case
@@ -369,13 +369,13 @@ fnNs :: Map.Map (Text, Text) FnNRes
 fnNs =
   Map.fromList $
     [ fn | i <- [0 .. 10], fn <-
-                             [ ((EC.dataFunctionUncurried, name C.mkFn i), MkFnN i $ \args e -> EFunN Nothing args e),
-                               ((EC.effectUncurried, name C.mkEffectFn i), MkFnN i $ \args e -> EFunN Nothing args (EApp RegularApp e []))
+                             [ ((EC.dataFunctionUncurried, name C.S_mkFn i), MkFnN i $ \args e -> EFunN Nothing args e),
+                               ((EC.effectUncurried, name (snd C.P_mkEffectFn) i), MkFnN i $ \args e -> EFunN Nothing args (EApp RegularApp e []))
                              ]
     ]
       ++ [ fn | i <- [1 .. 10], fn <-
-                                  [ ((EC.dataFunctionUncurried, name C.runFn i), RunFnN i (EApp RegularApp)),
-                                    ((EC.effectUncurried, name C.runEffectFn i), RunFnN i $ \fn acc -> EFun0 Nothing (EApp RegularApp fn acc))
+                                  [ ((EC.dataFunctionUncurried, name C.S_runFn i), RunFnN i (EApp RegularApp)),
+                                    ((EC.effectUncurried, name (snd C.P_runEffectFn) i), RunFnN i $ \fn acc -> EFun0 Nothing (EApp RegularApp fn acc))
                                   ]
          ]
   where
@@ -449,92 +449,92 @@ unaryOperators =
             Unary heytingAlgebraBoolean opNot Not
           ]
 
-semiringNumber :: forall a b. (IsString a, IsString b) => (a, b)
-semiringNumber = (EC.dataSemiring, C.semiringNumber)
+semiringNumber :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+semiringNumber = (EC.dataSemiring, snd $ C.P_semiringNumber)
 
-semiringInt :: forall a b. (IsString a, IsString b) => (a, b)
-semiringInt = (EC.dataSemiring, C.semiringInt)
+semiringInt :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+semiringInt = (EC.dataSemiring, snd $ C.P_semiringInt)
 
-ringNumber :: forall a b. (IsString a, IsString b) => (a, b)
-ringNumber = (EC.dataRing, C.ringNumber)
+ringNumber :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+ringNumber = (EC.dataRing, snd $ C.P_ringNumber)
 
-ringInt :: forall a b. (IsString a, IsString b) => (a, b)
-ringInt = (EC.dataRing, C.ringInt)
+ringInt :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+ringInt = (EC.dataRing, snd $ C.P_ringInt)
 
-euclideanRingNumber :: forall a b. (IsString a, IsString b) => (a, b)
-euclideanRingNumber = (EC.dataEuclideanRing, C.euclideanRingNumber)
+euclideanRingNumber :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+euclideanRingNumber = (EC.dataEuclideanRing, snd $ C.P_euclideanRingNumber)
 
-euclideanRingInt :: forall a b. (IsString a, IsString b) => (a, b)
+euclideanRingInt :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
 euclideanRingInt = (EC.dataEuclideanRing, EC.euclideanRingInt)
 
-eqNumber :: forall a b. (IsString a, IsString b) => (a, b)
-eqNumber = (EC.dataEq, C.eqNumber)
+eqNumber :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+eqNumber = (EC.dataEq, snd $ C.P_eqNumber)
 
-eqInt :: forall a b. (IsString a, IsString b) => (a, b)
-eqInt = (EC.dataEq, C.eqInt)
+eqInt :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+eqInt = (EC.dataEq, snd $ C.P_eqInt)
 
-eqString :: forall a b. (IsString a, IsString b) => (a, b)
-eqString = (EC.dataEq, C.eqString)
+eqString :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+eqString = (EC.dataEq, snd $ C.P_eqString)
 
-eqChar :: forall a b. (IsString a, IsString b) => (a, b)
-eqChar = (EC.dataEq, C.eqChar)
+eqChar :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+eqChar = (EC.dataEq, snd $ C.P_eqChar)
 
-eqBoolean :: forall a b. (IsString a, IsString b) => (a, b)
-eqBoolean = (EC.dataEq, C.eqBoolean)
+eqBoolean :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+eqBoolean = (EC.dataEq, snd $ C.P_eqBoolean)
 
-ordBoolean :: forall a b. (IsString a, IsString b) => (a, b)
-ordBoolean = (EC.dataOrd, C.ordBoolean)
+ordBoolean :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+ordBoolean = (EC.dataOrd, snd $ C.P_ordBoolean)
 
-ordNumber :: forall a b. (IsString a, IsString b) => (a, b)
-ordNumber = (EC.dataOrd, C.ordNumber)
+ordNumber :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+ordNumber = (EC.dataOrd, snd $ C.P_ordNumber)
 
-ordInt :: forall a b. (IsString a, IsString b) => (a, b)
-ordInt = (EC.dataOrd, C.ordInt)
+ordInt :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+ordInt = (EC.dataOrd, snd $ C.P_ordInt)
 
-ordString :: forall a b. (IsString a, IsString b) => (a, b)
-ordString = (EC.dataOrd, C.ordString)
+ordString :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+ordString = (EC.dataOrd, snd $ C.P_ordString)
 
-ordChar :: forall a b. (IsString a, IsString b) => (a, b)
-ordChar = (EC.dataOrd, C.ordChar)
+ordChar :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+ordChar = (EC.dataOrd, snd $ C.P_ordChar)
 
--- semigroupString :: forall a b. (IsString a, IsString b) => (a, b)
--- semigroupString = (EC.dataSemigroup, C.semigroupString)
+-- semigroupString :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+-- semigroupString = (EC.dataSemigroup, snd $ C.P_semigroupString)
 
-boundedBoolean :: forall a b. (IsString a, IsString b) => (a, b)
-boundedBoolean = (EC.dataBounded, C.boundedBoolean)
+boundedBoolean :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+boundedBoolean = (EC.dataBounded, snd $ C.P_boundedBoolean)
 
-heytingAlgebraBoolean :: forall a b. (IsString a, IsString b) => (a, b)
-heytingAlgebraBoolean = (EC.dataHeytingAlgebra, C.heytingAlgebraBoolean)
+heytingAlgebraBoolean :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+heytingAlgebraBoolean = (EC.dataHeytingAlgebra, snd $ C.P_heytingAlgebraBoolean)
 
 semigroupList :: forall a b. (IsString a, IsString b) => (a, b)
 semigroupList = (EC.erlDataListTypes, EC.semigroupList)
 
--- semigroupoidFn :: forall a b. (IsString a, IsString b) => (a, b)
--- semigroupoidFn = (EC.controlSemigroupoid, C.semigroupoidFn)
+-- semigroupoidFn :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+-- semigroupoidFn = (EC.controlSemigroupoid, snd $ C.P_semigroupoidFn)
 
-opAdd :: forall a b. (IsString a, IsString b) => (a, b)
-opAdd = (EC.dataSemiring, C.add)
+opAdd :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+opAdd = (EC.dataSemiring, snd $ C.P_add)
 
-opMul :: forall a b. (IsString a, IsString b) => (a, b)
-opMul = (EC.dataSemiring, C.mul)
+opMul :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+opMul = (EC.dataSemiring, snd $ C.P_mul)
 
-opEq :: forall a b. (IsString a, IsString b) => (a, b)
-opEq = (EC.dataEq, C.eq)
+opEq :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+opEq = (EC.dataEq, snd $ C.P_eq)
 
-opNotEq :: forall a b. (IsString a, IsString b) => (a, b)
-opNotEq = (EC.dataEq, C.notEq)
+opNotEq :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+opNotEq = (EC.dataEq, snd $ C.P_notEq)
 
-opLessThan :: forall a b. (IsString a, IsString b) => (a, b)
-opLessThan = (EC.dataOrd, C.lessThan)
+opLessThan :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+opLessThan = (EC.dataOrd, snd $ C.P_lessThan)
 
-opLessThanOrEq :: forall a b. (IsString a, IsString b) => (a, b)
-opLessThanOrEq = (EC.dataOrd, C.lessThanOrEq)
+opLessThanOrEq :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+opLessThanOrEq = (EC.dataOrd, snd $ C.P_lessThanOrEq)
 
-opGreaterThan :: forall a b. (IsString a, IsString b) => (a, b)
-opGreaterThan = (EC.dataOrd, C.greaterThan)
+opGreaterThan :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+opGreaterThan = (EC.dataOrd, snd $ C.P_greaterThan)
 
-opGreaterThanOrEq :: forall a b. (IsString a, IsString b) => (a, b)
-opGreaterThanOrEq = (EC.dataOrd, C.greaterThanOrEq)
+opGreaterThanOrEq :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+opGreaterThanOrEq = (EC.dataOrd, snd $ C.P_greaterThanOrEq)
 
 opMin :: forall a b. (IsString a, IsString b) => (a, b)
 opMin = (EC.dataOrd, EC.min)
@@ -542,26 +542,26 @@ opMin = (EC.dataOrd, EC.min)
 opMax :: forall a b. (IsString a, IsString b) => (a, b)
 opMax = (EC.dataOrd, EC.max)
 
-opAppend :: forall a b. (IsString a, IsString b) => (a, b)
-opAppend = (EC.dataSemigroup, C.append)
+opAppend :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+opAppend = (EC.dataSemigroup, snd $ C.P_append)
 
-opSub :: forall a b. (IsString a, IsString b) => (a, b)
-opSub = (EC.dataRing, C.sub)
+opSub :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+opSub = (EC.dataRing, snd $ C.P_sub)
 
-opNegate :: forall a b. (IsString a, IsString b) => (a, b)
-opNegate = (EC.dataRing, C.negate)
+opNegate :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+opNegate = (EC.dataRing, snd $ C.P_negate)
 
-opDiv :: forall a b. (IsString a, IsString b) => (a, b)
-opDiv = (EC.dataEuclideanRing, C.div)
+opDiv :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+opDiv = (EC.dataEuclideanRing, snd $ C.P_div)
 
-opConj :: forall a b. (IsString a, IsString b) => (a, b)
-opConj = (EC.dataHeytingAlgebra, C.conj)
+opConj :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+opConj = (EC.dataHeytingAlgebra, snd $ C.P_conj)
 
-opDisj :: forall a b. (IsString a, IsString b) => (a, b)
-opDisj = (EC.dataHeytingAlgebra, C.disj)
+opDisj :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+opDisj = (EC.dataHeytingAlgebra, snd $ C.P_disj)
 
-opNot :: forall a b. (IsString a, IsString b) => (a, b)
-opNot = (EC.dataHeytingAlgebra, C.not)
+opNot :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+opNot = (EC.dataHeytingAlgebra, snd $ C.P_not)
 
 functorVoid :: forall a b. (IsString a, IsString b) => (a, b)
 functorVoid = (EC.dataFunctor, EC.void)

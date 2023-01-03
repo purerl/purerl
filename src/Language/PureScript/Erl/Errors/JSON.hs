@@ -52,7 +52,7 @@ toJSONErrors verbose level = map (toJSONError verbose level) . E.runMultipleErro
 toJSONError :: Bool -> E.Level -> ErrorMessage -> JSONError
 toJSONError verbose level e =
   JSONError (toErrorPosition <$> fmap NEL.head spans)
-            (E.renderBox (E.prettyPrintSingleError (E.PPEOptions Nothing verbose level False mempty) (E.stripModuleAndSpan e)))
+            (E.renderBox (E.prettyPrintSingleError (E.PPEOptions Nothing verbose level False mempty []) (E.stripModuleAndSpan e)))
             (E.errorCode e)
             (E.errorDocUri e)
             (P.spanName <$> fmap NEL.head spans)
