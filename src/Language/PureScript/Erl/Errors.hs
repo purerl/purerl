@@ -39,8 +39,7 @@ import qualified Language.PureScript.Constants.Prim as C
 import Language.PureScript.Crash ( internalError )
 import           Language.PureScript.Label (Label(..))
 import Language.PureScript.Names
-    ( ModuleName, Ident, Qualified(Qualified), QualifiedBy(ByModuleName),
-      isPlainIdent,
+    ( ModuleName,
       runIdent,
       runModuleName,
       showIdent,
@@ -57,11 +56,7 @@ import           Language.PureScript.Pretty.Common (endWith)
 import           Language.PureScript.PSString (decodeStringWithReplacement)
 import Language.PureScript.Types
     ( Type(TypeConstructor, RCons, TypeLevelString, TypeApp, KindApp),
-      SourceType,
       eqType,
-      eraseForAllKindAnnotations,
-      eraseKindApps,
-      getAnnForType,
       rowFromList,
       rowToList,
       Constraint(Constraint),
@@ -509,14 +504,6 @@ prettyPrintSingleError (PPEOptions codeColor full _level _showDocs relPath fileC
   prettyDepth | full = 1000
               | otherwise = 3
 
-  prettyType :: Type a -> Box.Box
-  prettyType = prettyTypeWithDepth prettyDepth
-
-  prettyTypeWithDepth :: Int -> Type a -> Box.Box
-  prettyTypeWithDepth depth
-    | full = typeAsBox depth
-    | otherwise = typeAsBox depth . eraseForAllKindAnnotations . eraseKindApps
-
   paras :: forall f. Foldable f => f Box.Box -> Box.Box
   paras = Box.vcat Box.left
 
@@ -562,27 +549,6 @@ prettyPrintSingleError (PPEOptions codeColor full _level _showDocs relPath fileC
   hintCategory ErrorInRoleDeclaration{}             = DeclarationHint
   hintCategory ErrorInForeignImport{}               = DeclarationHint
   hintCategory _                                    = OtherHint
-
-  prettyPrintPlainIdent :: Ident -> Text
-  prettyPrintPlainIdent ident =
-    if isPlainIdent ident
-    then " " <> markCode (showIdent ident)
-    else ""
-
-  prettyInstanceName :: Qualified (Either SourceType Ident) -> Box.Box
-  prettyInstanceName = \case
-    Qualified qb (Left ty) ->
-      "instance "
-        Box.<> (case qb of
-                  ByModuleName mn -> "in module "
-                    Box.<> line (markCode $ runModuleName mn)
-                    Box.<> " "
-                  _ -> Box.nullBox)
-        Box.<> "with type "
-        Box.<> markCodeBox (prettyType ty)
-        Box.<> " "
-        Box.<> (line . displayStartEndPos . fst $ getAnnForType ty)
-    Qualified mn (Right inst) -> line . markCode . showQualified showIdent $ Qualified mn inst
 
   -- | As of this writing, this function assumes that all provided SourceSpans
   -- are non-overlapping (except for exact duplicates) and span no line breaks. A
