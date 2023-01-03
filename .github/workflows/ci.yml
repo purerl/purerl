@@ -76,12 +76,20 @@ jobs:
         run: |
           mkdir -p "$STACK_ROOT"
           echo "local-programs-path: $STACK_ROOT/programs" > $STACK_ROOT/config.yaml
+      
+      - name: "(Release only) Check release matches tag"
+        if: "${{ env.CI_RELEASE == 'true' }}"
+        run: |
+          actual_version=$(grep version: package.yaml  | awk '{ gsub(/"/, "", $2); print $2 }')
+          [ "v${actual_version}" = "${{ github.event.release.tag_name }}" ]
+          echo "Version is $actual_version, tag is ${{ github.event.release.tag_name }}"
 
       # - run: "ci/run-hlint.sh --git"
       #   env:
       #     VERSION: "2.2.11"
 
       - run: "ci/fix-home.sh ci/build.sh"
+
 
       - name: "(Release only) Create bundle"
         if: "${{ env.CI_RELEASE == 'true' }}"
