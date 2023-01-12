@@ -11,6 +11,7 @@ PureScript is a small strongly typed programming language with expressive types,
   - ~~[purerl Pursuit](https://pursuit.purerl.fun/) - a version of the PureScript pursuit documentation repository for purerl package sets~~ (no longer being kept up to date)
 - The [purerl](https://github.com/purerl) organisation hosts ports of some core libraries.
 - The [purerl-cookbook](https://purerl-cookbook.readthedocs.io) contains some code examples and explanations.
+- The [purerl-optimiser](https://github.com/id3as/purerl-optimiser/) which memoizes type class dictionaries
 
 # Versions
 
