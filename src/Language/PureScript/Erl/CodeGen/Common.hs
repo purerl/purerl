@@ -4,6 +4,7 @@
 module Language.PureScript.Erl.CodeGen.Common
 ( runAtom
 , atomPS
+, psStringToText
 , atom
 , atomModuleName
 , erlModuleName
@@ -45,7 +46,10 @@ runAtom at = case at of
 
 -- Atoms do not support codepoints > 255
 atomPS :: PSString -> Text
-atomPS a = atom $ foldMap escapeChar (toUTF16CodeUnits a)
+atomPS = atom . psStringToText
+
+psStringToText :: PSString -> Text
+psStringToText a = foldMap escapeChar (toUTF16CodeUnits a)
   where
     escapeChar :: Word16 -> Text
     escapeChar c | c > 0xFF = "@x" <> hex 4 c -- Can't use real unicode escape

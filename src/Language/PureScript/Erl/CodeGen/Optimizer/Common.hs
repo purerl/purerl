@@ -8,7 +8,7 @@ import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Language.PureScript.Erl.CodeGen.AST
-import Language.PureScript.Erl.CodeGen.Common (atomPS)
+import Language.PureScript.Erl.CodeGen.Common (psStringToText)
 import Language.PureScript.PSString (PSString)
 import Prelude.Compat
 
@@ -18,14 +18,14 @@ isFn (moduleName, fnName) (EApp _ (EAtomLiteral (Atom (Just x) y)) []) =
 isFn _ _ = False
 
 isDict :: (Text, PSString) -> Erl -> Bool
-isDict (moduleName, dictName) (EApp _ (EAtomLiteral (Atom (Just x) y)) []) = x == moduleName && y == atomPS dictName
+isDict (moduleName, dictName) (EApp _ (EAtomLiteral (Atom (Just x) y)) []) = x == moduleName && y == psStringToText dictName
 isDict _ _ = False
 
 isUncurriedFn :: (Text, PSString) -> Erl -> Bool
 isUncurriedFn = isFnName
 
 isFnName :: (Text, PSString) -> Erl -> Bool
-isFnName (moduleName, dictName) (EAtomLiteral (Atom (Just x) y)) = x == moduleName && y == atomPS dictName
+isFnName (moduleName, dictName) (EAtomLiteral (Atom (Just x) y)) = x == moduleName && y == psStringToText dictName
 isFnName _ _ = False
 
 isAppliedDict :: (Text, PSString) -> (Text, PSString) -> Erl -> Bool

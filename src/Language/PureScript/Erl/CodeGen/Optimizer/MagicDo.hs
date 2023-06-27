@@ -17,12 +17,13 @@ import Language.PureScript.Erl.CodeGen.Optimizer.Common
   )
 import Prelude.Compat
 import Protolude (unsnoc)
+import Debug.Trace
 
 magicDo :: (Erl -> Erl) -> Erl -> Erl
 magicDo = magicDo'' EC.effect EC.effectDictionaries
 
 magicDo'' :: Text -> EC.EffectDictionaries -> (Erl -> Erl) -> Erl -> Erl
-magicDo'' effectModule EC.EffectDictionaries {..} expander =
+magicDo'' effectModule EC.EffectDictionaries {..} expander = trace "magic do"
   everywhereOnErlTopDown convert
   where
     -- The name of the function block which is added to denote a do block
@@ -31,30 +32,30 @@ magicDo'' effectModule EC.EffectDictionaries {..} expander =
     convert :: Erl -> Erl
     convert appExp@EApp {} = case expander appExp of
       -- Desugar pure
-      EApp _ (collect 2 -> EApp _ fn [dict, val]) [] | isPure fn dict -> val
+      EApp _ (collect 2 -> EApp _ fn [dict, val]) [] | isPure fn dict -> trace "pure" $ val
       -- Desugar discard
       (collect 4 -> EApp _ fn [dict1, dict2, m, EFun1 Nothing _ e])
-        | isDiscard fn dict1 dict2 ->
+        | isDiscard fn dict1 dict2 -> trace "discard" $
           EFun0 (Just fnName) (EBlock (EApp RegularApp m [] : [EApp RegularApp e []]))
       -- Desugar bind to wildcard
       (collect 3 -> EApp _ fn [dict, m, EFun1 Nothing "_" e])
-        | isBind fn dict ->
+        | isBind fn dict -> trace "bind _" $
           EFun0 (Just fnName) (EBlock (EApp RegularApp m [] : [EApp RegularApp e []]))
       -- Desugar bind
       (collect 3 -> EApp _ fn [dict, m, EFun1 Nothing var e])
-        | isBind fn dict ->
+        | isBind fn dict -> trace "bind" $
           EFun0 (Just fnName) (EBlock (EVarBind var (EApp RegularApp m []) : [EApp RegularApp e []]))
       -- Desugar map
       EApp _ (collect 3 -> EApp _ fn [dict, f, m]) []
-        | isMap fn dict ->
+        | isMap fn dict -> trace "map" $
           EApp RegularApp f [EApp RegularApp m []]
       -- Push application under case
-      EApp _ (ECaseOf ec binds) [] ->
+      EApp _ (ECaseOf ec binds) [] -> trace "case app" $
         ECaseOf ec $ map (second (flip (EApp RegularApp) [])) binds
       -- Push application under block
       EApp _ (EBlock es) []
         | Just (es', e) <- unsnoc es,
-          all isVarBind es' ->
+          all isVarBind es' -> trace "block app" $
           EBlock (es' <> [EApp RegularApp e []])
       _other -> appExp
 

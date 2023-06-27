@@ -18,7 +18,7 @@ foo = do
   foo <- pure 42
   action
   let bar = foo + 1
-  pure 13
+  pure 14
 
 newtype Efect a = Efect (Effect a)
 

@@ -23,11 +23,12 @@ import qualified Data.Text as T
 import qualified Language.PureScript.Constants.Prim as C
 import qualified Language.PureScript.Constants.Libs as C
 import Language.PureScript.Erl.CodeGen.AST
-import Language.PureScript.Erl.CodeGen.Common (atomPS, runAtom)
+import Language.PureScript.Erl.CodeGen.Common (runAtom, psStringToText)
 import qualified Language.PureScript.Erl.CodeGen.Constants as EC
 import Language.PureScript.Erl.CodeGen.Optimizer.Common
 import Language.PureScript.PSString (PSString, mkString)
 import Prelude.Compat
+import Debug.Trace
 
 isEVar :: Erl -> Bool
 isEVar (EVar _) = True
@@ -239,7 +240,7 @@ inlineCommonOperators effectModule EC.EffectDictionaries {..} expander =
         convert :: Erl -> Erl
         convert (EApp _ (EApp _ (EApp _ fn []) [dict]) [x]) | isDict dicts dict && isFnName fns fn = f x
         convert (EApp _ (EApp _ fn [dict]) [x]) | isDict dicts dict && isFnName fns fn = f x
-        convert (EApp _ fn [dict, x]) | isFnName dicts dict && isFnName fns fn = f x
+        convert (expander -> EApp _ fn [dict, x]) | isFnName dicts dict && isFnName fns fn = f x
         convert other = other
 
     unaryUndefTCFn :: (Text, PSString) -> (Erl -> Erl) -> Erl -> Erl
@@ -306,12 +307,7 @@ inlineCommonOperators effectModule EC.EffectDictionaries {..} expander =
 
 binaryOps :: (Erl -> Erl) -> Erl -> Erl
 binaryOps expander = \case
-  eapp@(EApp _ fn [dict, opArg1, opArg2])
-    | Just op <- getOp fn dict ->
-      res op opArg1 opArg2
-    | otherwise ->
-      eapp
-  EApp _ (EApp _ (expander -> EApp _ fn [dict]) [opArg1]) [opArg2]
+  (collect 3 . expander -> EApp _ fn [dict, opArg1, opArg2])
     | Just op <- getOp fn dict ->
       res op opArg1 opArg2
   other -> other
@@ -321,21 +317,19 @@ binaryOps expander = \case
     res (Right f) = f
 
     getOp (EAtomLiteral (Atom (Just moduleName) fnName)) (EApp _ (EAtomLiteral (Atom (Just dictModuleName) dictName)) []) =
+      traceShow ((dictModuleName, dictName), (moduleName, fnName)) $
       Map.lookup ((dictModuleName, dictName), (moduleName, fnName)) binaryOperators
     getOp _ _ = Nothing
 
 unaryOps :: (Erl -> Erl) -> Erl -> Erl
 unaryOps expander = \case
-  eapp@(EApp _ fn [dict, opArg])
-    | Just op <- getOp fn dict ->
-      EUnary op opArg
-    | otherwise -> eapp
-  EApp _ (expander -> EApp _ fn [dict]) [opArg]
+  (collect 2 . expander -> EApp _ fn [dict, opArg])
     | Just op <- getOp fn dict ->
       EUnary op opArg
   other -> other
   where
     getOp (EAtomLiteral (Atom (Just moduleName) fnName)) (EApp _ (EAtomLiteral (Atom (Just dictModuleName) dictName)) []) =
+      traceShow ((dictModuleName, dictName), (moduleName, fnName)) $
       Map.lookup ((dictModuleName, dictName), (moduleName, fnName)) unaryOperators
     getOp _ _ = Nothing
 
@@ -379,7 +373,7 @@ fnNs =
                                   ]
          ]
   where
-    name prefix n = atomPS $ mkString $ prefix <> T.pack (show n)
+    name prefix n = psStringToText $ mkString $ prefix <> T.pack (show n)
 
 onTupleN :: Erl -> Erl
 onTupleN = \case
@@ -397,7 +391,7 @@ tupleNs =
     ]
   where
     fn i = ((EC.erlDataTuple, name EC.tuple i), i)
-    name prefix n = atomPS $ mkString $ prefix <> T.pack (show n)
+    name prefix n = psStringToText $ mkString $ prefix <> T.pack (show n)
 
 binaryOperators :: Map.Map ((Text, Text), (Text, Text)) (Either BinaryOperator (Erl -> Erl -> Erl))
 binaryOperators =
@@ -437,13 +431,13 @@ binaryOperators =
                 [ordBoolean, ordChar, ordInt, ordNumber, ordString]
           )
   where
-    conv (Binary (dmod, dfn) (omod, ofn) result) = (((dmod, atomPS dfn), (omod, atomPS ofn)), Left result)
-    conv (BinaryFn (dmod, dfn) (omod, ofn) result) = (((dmod, atomPS dfn), (omod, atomPS ofn)), Right result)
+    conv (Binary (dmod, dfn) (omod, ofn) result) = (((dmod, psStringToText dfn), (omod, psStringToText ofn)), Left result)
+    conv (BinaryFn (dmod, dfn) (omod, ofn) result) = (((dmod, psStringToText dfn), (omod, psStringToText ofn)), Right result)
 
 unaryOperators :: Map.Map ((Text, Text), (Text, Text)) UnaryOperator
-unaryOperators =
+unaryOperators = traceShowId $ 
   Map.fromList $
-    (\(Unary (dmod, dfn) (omod, ofn) result) -> (((dmod, atomPS dfn), (omod, atomPS ofn)), result))
+    (\(Unary (dmod, dfn) (omod, ofn) result) -> (((dmod, psStringToText dfn), (omod, psStringToText ofn)), result))
       <$> [ Unary ringNumber opNegate Negate,
             Unary ringInt opNegate Negate,
             Unary heytingAlgebraBoolean opNot Not

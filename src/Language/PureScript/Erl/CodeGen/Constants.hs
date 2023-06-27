@@ -211,7 +211,7 @@ fromRight = "fromRight"
 -- Typeclass Dictionary names
 
 euclideanRingInt :: forall a. (IsString a) => a
-euclideanRingInt = "euclideanRingNumber"
+euclideanRingInt = "euclideanRingInt"
 
 semigroupList :: forall a. (IsString a) => a
 semigroupList = "semigroupList"

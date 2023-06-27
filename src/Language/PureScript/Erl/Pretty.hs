@@ -278,7 +278,7 @@ binary op str = AssocL match (\v1 v2 -> v1 <> emit (" " <> str <> " ") <> v2)
 
 
 unary' :: (Emit gen) => UnaryOperator -> (Erl -> Text) -> Operator PrinterState Erl gen
-unary' op mkStr = Wrap match (<>)
+unary' op mkStr = Wrap match (\l r -> l <> emit " " <> r)
   where
   match :: (Emit gen) => Pattern PrinterState Erl (gen, Erl)
   match = mkPattern match'

@@ -66,6 +66,8 @@ import System.IO (hPutStr, hPutStrLn, stderr)
 import System.IO.Error (isDoesNotExistError)
 import Prelude
 
+import Debug.Trace
+
 data BuildOptions = BuildOptions
   { buildOutputDir :: FilePath,
     buildRun :: Maybe String,
@@ -188,7 +190,7 @@ compile' BuildOptions {..} = do
     -- TODO now we are asking needsBuild twice
     buildInfo <- traverse (\m -> (m,) <$> needsBuild m) modules'
     let needToBuild = mapMaybe (\(res, (_, ntb)) -> if ntb then Just res else Nothing) buildInfo
-
+    
     makeRes <- if null needToBuild
       then do
         pure []

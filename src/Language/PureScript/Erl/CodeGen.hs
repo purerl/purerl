@@ -834,7 +834,7 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
               pure ([], [(EFunBinder bs Nothing, e')])
             Left guards -> first concat . unzip <$> mapM (guardToErl bs) guards
 
-          pure (es ++ binderBinds, res, binderVars)
+          pure (binderBinds ++ es, res, binderVars)
 
         guardToErl :: [Erl] -> (Expr Ann, Expr Ann) -> m ([Erl], (EFunBinder, Erl))
         guardToErl bs (ge, e) = do
@@ -868,6 +868,21 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
     replaceBVars vars (VarBinder a x) = VarBinder a $ fromMaybe x $ lookup x vars
     replaceBVars vars (NamedBinder a x b) = NamedBinder a (fromMaybe x $ lookup x vars) b
     replaceBVars _ z = z
+
+    -- guardToErl' :: [Erl] -> (Expr Ann, Expr Ann) -> m ([Erl], (EFunBinder, Erl))
+    -- guardToErl' bs (ge, e) = do
+    --   var <- freshNameErl
+    --   ge' <- valueToErl ge
+    --   let binder = EFunBinder bs Nothing
+    --       fun =
+    --         EFunFull
+    --           (Just "Guard")
+    --           ( (binder, ge') :
+    --               [(EFunBinder (replicate (length bs) (EVar "_")) Nothing, boolToAtom False) | not (irrefutable binder)]
+    --           )
+    --       cas = EApp RegularApp fun vals
+    --   e' <- valueToErl e
+    --   pure ([EVarBind var cas], (EFunBinder bs (Just $ Guard $ EVar var), e'))
 
     binderToErl' :: Binder Ann -> m (Erl, [((EFunBinder, [Erl]) -> Erl, (T.Text, Erl))])
     binderToErl' (NullBinder _) = pure (EVar "_", [])

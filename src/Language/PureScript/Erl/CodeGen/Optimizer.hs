@@ -12,7 +12,7 @@ import Prelude.Compat
 import Control.Monad.Supply.Class (MonadSupply)
 
 import Language.PureScript.Erl.CodeGen.AST
-    ( everywhereOnErl, Erl(..), pattern EApp, Atom )
+    ( everywhereOnErl, Erl(..), pattern EApp, Atom, curriedApp )
 import Language.PureScript.Erl.CodeGen.Optimizer.MagicDo
     ( magicDo )
 import Language.PureScript.Erl.CodeGen.Optimizer.Blocks
@@ -34,13 +34,15 @@ import Language.PureScript.Erl.CodeGen.Optimizer.Unused (removeUnusedFuns)
 import Data.Map (Map)
 import Language.PureScript.Erl.CodeGen.Optimizer.Memoize (addMemoizeAnnotations)
 import Control.Monad ((<=<))
-
+import Debug.Trace
 -- |
 -- Apply a series of optimizer passes to simplified Javascript code
 --
 optimize :: MonadSupply m => [(Atom, Int)] -> Map Atom Int -> [Erl] -> m [Erl]
-optimize exports memoizable es = removeUnusedFuns exports <$>
+optimize exports memoizable es = (
+  removeUnusedFuns exports <$>
   traverse go es
+  )
   where
   go erl =
    do
@@ -53,6 +55,7 @@ optimize exports memoizable es = removeUnusedFuns exports <$>
     erl'' <- untilFixedPoint tidyUp
       =<< untilFixedPoint (return . magicDo expander) 
       erl'
+
     pure $ addMemoizeAnnotations memoizable erl''
 
   expander = buildExpander es
@@ -88,17 +91,24 @@ untilFixedPoint f = go
 -- level and not worrying about any inner scopes.
 --
 buildExpander :: [Erl] -> Erl -> Erl
-buildExpander = replaceAtoms . foldr go []
+buildExpander = replaceUpdates . foldr go []
   where
   go = \case
-    EFunctionDef _ _ name [] e | isSimpleApp e  -> ((name, e) :)
+    EFunctionDef _ _ name [] e | isSimpleApp e -> ((name, e) :)
     _ -> id
   
-  replaceAtoms updates = everywhereOnErl (replaceAtom updates)
+  replaceUpdates updates = everywhereOnErl (replaceUpdate updates)
   
-  replaceAtom updates = \case
+  replaceUpdate updates = \case
+    -- Regular form e.g. bind()
     EApp _ (EAtomLiteral a) [] | Just e <- lookup a updates
-      -> replaceAtoms updates e
+      -> replaceUpdates updates e
+    -- Uncurried form, e.g. bind(e1, e2) where bind is the overload for bind/2, bind/0, such that bind(e1, e2) ~ ((bind())(e1))(e2)
+    -- IF the original replacement was valid by way of being eligible to be inlined, this one should be too, doing both steps in 1
+    
+    EApp s (EAtomLiteral a) args | Just e <- lookup a updates
+      -> replaceUpdates updates $ curriedApp args e
+
     other -> other
 
   -- simple nested applications that look similar to floated synthetic apps
