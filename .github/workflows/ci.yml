@@ -22,9 +22,9 @@ jobs:
       fail-fast: false # do not cancel builds for other OSes if one fails
       matrix:
         include:
-        - os: "ubuntu-latest"
-          image: "haskell:9.2.4@sha256:dceec00f8ad896c327c2b5c77ba91c9824bf3e26a837f538ccfb80fb379dc52f"
-        - os: "macOS-10.15"
+        - os: ["ubuntu-latest"]
+          image: haskell:9.2.5@sha256:2597b0e2458165a6635906204f7fac43c22e7d2a46aca1235a811194bb6cd419
+        - os: ["macOS-11"]
         - os: "windows-2019"
 
     runs-on: "${{ matrix.os }}"

@@ -798,25 +798,16 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
             (binders'', _, []) -> ECaseOf (ETupleLiteral vals) (map funBinderToBinder binders'')
             _ -> EApp RegularApp (EFunFull (Just "Case") binders') (vals ++ arrayVars)
 
-          
-
-          extendGuards (count, acc) (exprs, binders, arrayMatches) = (count + length arrayMatches, acc ++ map go exprs)
+          extendGuards (count, acc) (exprs, _, arrayMatches) = (count + length arrayMatches, acc ++ map go exprs)
             where
-            go guard@(EVarBind var 
-              (EApp RegularApp
-                (EFunFull (Just "Guard") binders)
-                vals
-                ))
+            go (EVarBind var (EApp RegularApp (EFunFull (Just "Guard") binders) vals))
               | length arrayVars > 0 = 
                 (EVarBind var (EApp RegularApp
                   (EFunFull (Just "Guard") ( extendGuardBinder <$> binders ))
-                  (vals ++ map fst arrayMatches) -- TODO this needs padded
-                  -- TODO ACTUALLY the opposite, not padded is better, we don't have the vars at the point they are used - simply don't pad either side
+                  (vals ++ map fst arrayMatches)
                 ))
             go other = other
             extendGuardBinder (EFunBinder bs z, e) = (EFunBinder (bs ++ map snd arrayMatches) z, e)
-
-            
 
       pure $ case map (\(x, _, _) -> x) res of
         exprGroups | any (\g -> length g > 0) exprGroups -> EBlock (snd (foldl extendGuards (0, []) res) ++ [ret])

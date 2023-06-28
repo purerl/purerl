@@ -38,7 +38,6 @@ import Language.PureScript.Erl.Errors ( errorMessage )
 import Language.PureScript.Erl.Errors.Types
     ( SimpleErrorMessage(MissingFFIModule, UnnecessaryFFIModule) )
 import Data.Either (fromRight)
-import Debug.Trace
 
 data MakeActions m = MakeActions
   { codegen :: CodegenEnvironment -> CF.Module CF.Ann -> SupplyT m ()

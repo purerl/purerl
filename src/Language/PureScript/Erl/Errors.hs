@@ -50,7 +50,8 @@ import Language.PureScript.Pretty
       typeAsBox,
       typeAtomAsBox,
       typeDiffAsBox,
-      prettyPrintValue )
+      prettyPrintValue,
+      prettyPrintObjectKey )
 import           Language.PureScript.Errors (prettyPrintRef)
 import           Language.PureScript.Pretty.Common (endWith)
 import           Language.PureScript.PSString (decodeStringWithReplacement)
@@ -341,6 +342,12 @@ prettyPrintSingleError (PPEOptions codeColor full _level _showDocs relPath fileC
             , Box.moveRight 2 $ Box.hsep 1 Box.top [ line "is at least as general as type"
                                                    , markCodeBox $ typeAsBox prettyDepth t2
                                                    ]
+            ]
+    renderHint (ErrorInRowLabel lb) detail =
+      paras [ detail
+            , Box.hsep 1 Box.top [ line "while matching label"
+                                 , markCodeBox $ line $ prettyPrintObjectKey (runLabel lb)
+                                 ]
             ]
     renderHint (ErrorInInstance nm ts) detail =
       paras [ detail

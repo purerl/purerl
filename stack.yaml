@@ -2,6 +2,9 @@ resolver: lts-20.9
 pvp-bounds: both
 packages:
   - .
+ghc-options:
+  # Build with advanced optimizations enabled by default
+  "$locals": -O2 -Werror
 extra-deps:
   - language-javascript-0.7.0.0
   - github: purescript/purescript
@@ -23,6 +26,7 @@ extra-deps:
   - hspec-2.10.9
   - hspec-core-2.10.9
   - hspec-discover-2.10.9
+  
 flags:
   aeson-pretty:
     lib-only: true
