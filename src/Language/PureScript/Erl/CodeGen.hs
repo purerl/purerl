@@ -728,20 +728,7 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
         unApp other args = (other, args)
     valueToErl' _ (Case _ values binders) = do
       vals <- mapM valueToErl values
-      (exprs, binders', newvals) <- bindersToErl vals binders
-      -- let ret = EApp (EFunFull (Just "Case") binders') (vals++newvals)
-      let funBinderToBinder = \case
-            (EFunBinder [e] Nothing, ee) -> (EBinder e, ee)
-            (EFunBinder [e] (Just g), ee) -> (EGuardedBinder e g, ee)
-            (EFunBinder es Nothing, ee) -> (EBinder (ETupleLiteral es), ee)
-            (EFunBinder es (Just g), ee) -> (EGuardedBinder (ETupleLiteral es) g, ee)
-      let ret = case (binders', vals, newvals) of
-            (binders'', [val'], []) -> ECaseOf val' (map funBinderToBinder binders'')
-            (binders'', _, []) -> ECaseOf (ETupleLiteral vals) (map funBinderToBinder binders'')
-            _ -> EApp RegularApp (EFunFull (Just "Case") binders') (vals ++ newvals)
-      pure $ case exprs of
-        [] -> ret
-        _ -> EBlock (exprs ++ [ret])
+      caseToErl vals binders
     valueToErl' _ (Let _ ds val) = do
       ds' <- concat <$> mapM bindToErl ds
       ret <- valueToErl val
@@ -782,26 +769,62 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
     boolToAtom True = EAtomLiteral $ Atom Nothing "true"
     boolToAtom False = EAtomLiteral $ Atom Nothing "false"
 
-    bindersToErl :: [Erl] -> [CaseAlternative Ann] -> m ([Erl], [(EFunBinder, Erl)], [Erl])
-    bindersToErl vals cases = do
+    caseToErl :: [Erl] -> [CaseAlternative Ann] -> m Erl
+    caseToErl vals cases = do
       let binderLengths = map (length . caseAlternativeBinders) cases
           maxBinders = maximum binderLengths
       if length (nub binderLengths) > 1
         then traceM $ "Found inconsistent binder lengths: " <> show binderLengths
         else pure ()
-      res <- mapM (caseToErl maxBinders) cases
+      res <- mapM (caseAlternativeToErl maxBinders) cases
       let arrayVars = map fst $ concatMap (\(_, _, x) -> x) res
-          convBinder (count, binds) (_, binders, arrayMatches) =
+          
+          extendBinders (count, binds) (_, binders, arrayMatches) =
             (count + length arrayMatches, binds ++ map go binders)
             where
               go (EFunBinder bs z, e) = (EFunBinder (bs ++ padBinds count arrayMatches) z, e)
-          padBinds n binds = replicate n (EVar "_") ++ map snd binds ++ replicate (length arrayVars - n - length binds) (EVar "_")
-          binders' = snd $ foldl convBinder (0, []) res
 
-      pure (concatMap (\(x, _, _) -> x) res, binders', arrayVars)
+          padBinds n binds = replicate n (EVar "_") ++ map snd binds ++ replicate (length arrayVars - n - length binds) (EVar "_")
+          binders' = snd $ foldl extendBinders (0, []) res
+      
+          funBinderToBinder = \case
+            (EFunBinder [e] Nothing, ee) -> (EBinder e, ee)
+            (EFunBinder [e] (Just g), ee) -> (EGuardedBinder e g, ee)
+            (EFunBinder es Nothing, ee) -> (EBinder (ETupleLiteral es), ee)
+            (EFunBinder es (Just g), ee) -> (EGuardedBinder (ETupleLiteral es) g, ee)
+
+          ret = case (binders', vals, arrayVars) of
+            (binders'', [val'], []) -> ECaseOf val' (map funBinderToBinder binders'')
+            (binders'', _, []) -> ECaseOf (ETupleLiteral vals) (map funBinderToBinder binders'')
+            _ -> EApp RegularApp (EFunFull (Just "Case") binders') (vals ++ arrayVars)
+
+          
+
+          extendGuards (count, acc) (exprs, binders, arrayMatches) = (count + length arrayMatches, acc ++ map go exprs)
+            where
+            go guard@(EVarBind var 
+              (EApp RegularApp
+                (EFunFull (Just "Guard") binders)
+                vals
+                ))
+              | length arrayVars > 0 = 
+                (EVarBind var (EApp RegularApp
+                  (EFunFull (Just "Guard") ( extendGuardBinder <$> binders ))
+                  (vals ++ map fst arrayMatches) -- TODO this needs padded
+                  -- TODO ACTUALLY the opposite, not padded is better, we don't have the vars at the point they are used - simply don't pad either side
+                ))
+            go other = other
+            extendGuardBinder (EFunBinder bs z, e) = (EFunBinder (bs ++ map snd arrayMatches) z, e)
+
+            
+
+      pure $ case map (\(x, _, _) -> x) res of
+        exprGroups | any (\g -> length g > 0) exprGroups -> EBlock (snd (foldl extendGuards (0, []) res) ++ [ret])
+        _ -> ret
+      
       where
-        caseToErl :: Int -> CaseAlternative Ann -> m ([Erl], [(EFunBinder, Erl)], [(Erl, Erl)])
-        caseToErl numBinders (CaseAlternative binders alt) = do
+        caseAlternativeToErl :: Int -> CaseAlternative Ann -> m ([Erl], [(EFunBinder, Erl)], [(Erl, Erl)])
+        caseAlternativeToErl numBinders (CaseAlternative binders alt) = do
           let binders' = binders ++ replicate (numBinders - length binders) (NullBinder (nullSourceSpan, [], Nothing, Nothing))
               vars = nub $ concatMap binderVars binders'
 
@@ -818,14 +841,12 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
                         _ -> internalError "Replacing variables should give the same form back"
 
 
-          (bs, binderContext) :: ([Erl], [((EFunBinder, [Erl]) -> Erl, (T.Text, Erl))]) <- second concat . unzip <$> mapM binderToErl' binders''
+          (bs, binderContext) :: ([Erl], [((EFunBinder, [Erl]) -> Erl, (T.Text, Erl))]) <- second concat . unzip <$> mapM binderToErl binders''
 
           -- binderContext is bindings required to make pattern matching work in binders, ie converting arrays to lists
-          -- let (binderBinds, binderVars) = map ($ EFunBinder bs Nothing) *** map (first EVar) $ unzip binderContext
-
           let contextStep (binds, bindVars) (mkBind, otherContext) =
                 (binds <> [ mkBind (EFunBinder (bs <> map snd bindVars) Nothing, vals ++ map fst bindVars) ], bindVars <> [ first EVar otherContext ])
-              (binderBinds, binderVars) = foldl' contextStep ([], []) binderContext
+              (arrayBinds, arrayVars) = foldl' contextStep ([], []) binderContext
 
 
           (es, res) <- case alt' of
@@ -834,7 +855,7 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
               pure ([], [(EFunBinder bs Nothing, e')])
             Left guards -> first concat . unzip <$> mapM (guardToErl bs) guards
 
-          pure (binderBinds ++ es, res, binderVars)
+          pure (arrayBinds ++ es, res, arrayVars)
 
         guardToErl :: [Erl] -> (Expr Ann, Expr Ann) -> m ([Erl], (EFunBinder, Erl))
         guardToErl bs (ge, e) = do
@@ -869,27 +890,12 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
     replaceBVars vars (NamedBinder a x b) = NamedBinder a (fromMaybe x $ lookup x vars) b
     replaceBVars _ z = z
 
-    -- guardToErl' :: [Erl] -> (Expr Ann, Expr Ann) -> m ([Erl], (EFunBinder, Erl))
-    -- guardToErl' bs (ge, e) = do
-    --   var <- freshNameErl
-    --   ge' <- valueToErl ge
-    --   let binder = EFunBinder bs Nothing
-    --       fun =
-    --         EFunFull
-    --           (Just "Guard")
-    --           ( (binder, ge') :
-    --               [(EFunBinder (replicate (length bs) (EVar "_")) Nothing, boolToAtom False) | not (irrefutable binder)]
-    --           )
-    --       cas = EApp RegularApp fun vals
-    --   e' <- valueToErl e
-    --   pure ([EVarBind var cas], (EFunBinder bs (Just $ Guard $ EVar var), e'))
-
-    binderToErl' :: Binder Ann -> m (Erl, [((EFunBinder, [Erl]) -> Erl, (T.Text, Erl))])
-    binderToErl' (NullBinder _) = pure (EVar "_", [])
-    binderToErl' (VarBinder _ ident) = pure (EVar $ identToVar ident, [])
-    binderToErl' (LiteralBinder _ (ArrayLiteral es)) = do
+    binderToErl :: Binder Ann -> m (Erl, [((EFunBinder, [Erl]) -> Erl, (T.Text, Erl))])
+    binderToErl (NullBinder _) = pure (EVar "_", [])
+    binderToErl (VarBinder _ ident) = pure (EVar $ identToVar ident, [])
+    binderToErl (LiteralBinder _ (ArrayLiteral es)) = do
       x <- freshNameErl
-      args' <- mapM binderToErl' es
+      args' <- mapM binderToErl es
 
       let arrayToList = EAtomLiteral $ Atom (Just "array") "to_list"
           cas (binder, vals) =
@@ -905,13 +911,13 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
 
       let arr = EListLiteral (map fst args')
       pure (EVar x, (EVarBind var . cas, (var, arr)) : concatMap snd args')
-    binderToErl' (LiteralBinder _ lit) = literalToValueErl' EMapPattern binderToErl' lit
-    binderToErl' (ConstructorBinder (_, _, _, Just IsNewtype) _ _ [b]) = binderToErl' b
-    binderToErl' (ConstructorBinder _ _ (Qualified _ (ProperName ctorName)) binders) = do
-        args' <- mapM binderToErl' binders
+    binderToErl (LiteralBinder _ lit) = literalToValueErl' EMapPattern binderToErl lit
+    binderToErl (ConstructorBinder (_, _, _, Just IsNewtype) _ _ [b]) = binderToErl b
+    binderToErl (ConstructorBinder _ _ (Qualified _ (ProperName ctorName)) binders) = do
+        args' <- mapM binderToErl binders
         pure (constructorLiteral ctorName (map fst args'), concatMap snd args')
-    binderToErl' (NamedBinder _ ident binder) = do
-      (e, xs) <- binderToErl' binder
+    binderToErl (NamedBinder _ ident binder) = do
+      (e, xs) <- binderToErl binder
       pure (EVarBind (identToVar ident) e, xs)
 
     irrefutable (EFunBinder bindEs Nothing) = all isOk bindEs

@@ -28,12 +28,10 @@ import System.Directory
 import System.Process hiding (cwd)
 
 
-
 import Test.Hspec
 import qualified System.FilePath.Glob as Glob
 import TestUtils
 import Data.Char (toLower)
-import Debug.Trace (traceShowM)
 
 spec :: Spec
 spec = do

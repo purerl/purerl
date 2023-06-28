@@ -28,7 +28,6 @@ import qualified Language.PureScript.Erl.CodeGen.Constants as EC
 import Language.PureScript.Erl.CodeGen.Optimizer.Common
 import Language.PureScript.PSString (PSString, mkString)
 import Prelude.Compat
-import Debug.Trace
 
 isEVar :: Erl -> Bool
 isEVar (EVar _) = True
@@ -317,7 +316,6 @@ binaryOps expander = \case
     res (Right f) = f
 
     getOp (EAtomLiteral (Atom (Just moduleName) fnName)) (EApp _ (EAtomLiteral (Atom (Just dictModuleName) dictName)) []) =
-      traceShow ((dictModuleName, dictName), (moduleName, fnName)) $
       Map.lookup ((dictModuleName, dictName), (moduleName, fnName)) binaryOperators
     getOp _ _ = Nothing
 
@@ -329,7 +327,6 @@ unaryOps expander = \case
   other -> other
   where
     getOp (EAtomLiteral (Atom (Just moduleName) fnName)) (EApp _ (EAtomLiteral (Atom (Just dictModuleName) dictName)) []) =
-      traceShow ((dictModuleName, dictName), (moduleName, fnName)) $
       Map.lookup ((dictModuleName, dictName), (moduleName, fnName)) unaryOperators
     getOp _ _ = Nothing
 
@@ -435,7 +432,7 @@ binaryOperators =
     conv (BinaryFn (dmod, dfn) (omod, ofn) result) = (((dmod, psStringToText dfn), (omod, psStringToText ofn)), Right result)
 
 unaryOperators :: Map.Map ((Text, Text), (Text, Text)) UnaryOperator
-unaryOperators = traceShowId $ 
+unaryOperators =
   Map.fromList $
     (\(Unary (dmod, dfn) (omod, ofn) result) -> (((dmod, psStringToText dfn), (omod, psStringToText ofn)), result))
       <$> [ Unary ringNumber opNegate Negate,

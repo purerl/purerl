@@ -66,8 +66,6 @@ import System.IO (hPutStr, hPutStrLn, stderr)
 import System.IO.Error (isDoesNotExistError)
 import Prelude
 
-import Debug.Trace
-
 data BuildOptions = BuildOptions
   { buildOutputDir :: FilePath,
     buildRun :: Maybe String,

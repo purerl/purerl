@@ -12,7 +12,6 @@ import qualified Build
 import qualified Command.REPL as REPL
 import           Version (versionString)
 import Control.Applicative
-import Debug.Trace
 
 main :: IO ()
 main = do

@@ -34,15 +34,12 @@ import Language.PureScript.Erl.CodeGen.Optimizer.Unused (removeUnusedFuns)
 import Data.Map (Map)
 import Language.PureScript.Erl.CodeGen.Optimizer.Memoize (addMemoizeAnnotations)
 import Control.Monad ((<=<))
-import Debug.Trace
 -- |
 -- Apply a series of optimizer passes to simplified Javascript code
 --
 optimize :: MonadSupply m => [(Atom, Int)] -> Map Atom Int -> [Erl] -> m [Erl]
-optimize exports memoizable es = (
-  removeUnusedFuns exports <$>
-  traverse go es
-  )
+optimize exports memoizable es =
+  removeUnusedFuns exports <$> traverse go es
   where
   go erl =
    do
@@ -106,7 +103,7 @@ buildExpander = replaceUpdates . foldr go []
     -- Uncurried form, e.g. bind(e1, e2) where bind is the overload for bind/2, bind/0, such that bind(e1, e2) ~ ((bind())(e1))(e2)
     -- IF the original replacement was valid by way of being eligible to be inlined, this one should be too, doing both steps in 1
     
-    EApp s (EAtomLiteral a) args | Just e <- lookup a updates
+    EApp _ (EAtomLiteral a) args | Just e <- lookup a updates
       -> replaceUpdates updates $ curriedApp args e
 
     other -> other
