@@ -91,7 +91,7 @@ buildExpander :: [Erl] -> Erl -> Erl
 buildExpander = replaceUpdates . foldr go []
   where
   go = \case
-    EFunctionDef _ _ name [] e | isSimpleApp e -> ((name, e) :)
+    EFunctionDef _ _ name [] e | isSimpleApp e && size e <= 5 -> ((name, e) :)
     _ -> id
   
   replaceUpdates updates = everywhereOnErl (replaceUpdate updates)
@@ -112,3 +112,10 @@ buildExpander = replaceUpdates . foldr go []
   isSimpleApp (EApp _ e1 es) = isSimpleApp e1 && all isSimpleApp es
   isSimpleApp (EAtomLiteral _) = True
   isSimpleApp _ = False
+
+  -- Doesn't particularly matter what the size metric is, just that we have empirically determined
+  -- a cutoff for inlining. This is per-definition, so technically we could come up with a case where
+  -- we inline a huge expression because it is never large at any step and we recursively inline - but this
+  -- doesn't seem a problem currently.
+  size (EApp _ e1 es) = size e1 + sum (size <$> es)
+  size _ = 1 :: Integer
