@@ -146,11 +146,11 @@ buildCodegenEnvironment env = CodegenEnvironment env explicitArities
 
         go n = \case
           ConstrainedType _ _ ty -> go (n + 1) ty
-          ForAll _ _ _ ty _ -> go n ty
+          ForAll _ _ _ _ ty _ -> go n ty
           other -> (n, go' other)
         go' = \case
           TypeApp _ (TypeApp _ fn _) ty | fn == E.tyFunction -> 1 + go' ty
-          ForAll _ _ _ ty _ -> go' ty
+          ForAll _ _ _ _ ty _ -> go' ty
           _ -> 0
 
     explicitArities :: M.Map (Qualified Ident) FnArity
@@ -808,6 +808,7 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
                 ))
             go other = other
             extendGuardBinder (EFunBinder bs z, e) = (EFunBinder (bs ++ map snd arrayMatches) z, e)
+            
 
       pure $ case map (\(x, _, _) -> x) res of
         exprGroups | any (\g -> length g > 0) exprGroups -> EBlock (snd (foldl extendGuards (0, []) res) ++ [ret])
