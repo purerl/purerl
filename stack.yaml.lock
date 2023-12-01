@@ -7,66 +7,66 @@ packages:
 - completed:
     hackage: language-javascript-0.7.0.0@sha256:3eab0262b8ac5621936a4beab6a0f97d0e00a63455a8b0e3ac1547b4088dae7d,3898
     pantry-tree:
-      size: 2244
       sha256: b0f28d836cb3fbde203fd7318a896c3a20acd8653a905e1950ae2d9a64bccebf
+      size: 2244
   original:
     hackage: language-javascript-0.7.0.0
 - completed:
-    size: 867443
-    url: https://github.com/purescript/purescript/archive/v0.15.9.tar.gz
     name: purescript
-    version: 0.15.9
-    sha256: b266a4f2fc48f70895848c2719759ff6c2df6522f18ca15f8be0e42551e734dd
     pantry-tree:
-      size: 146188
-      sha256: 8c3cb776b394a8d940780dafccd85b093ecc5b0e7eebe7a51bb3ff5b887d0b60
+      sha256: 4a34b69f49b983d21e0eeb95f42cc2c443b7c6ea5a55d2a705a51dbbd18c6252
+      size: 148422
+    sha256: 39eb23090466e4eab84e04559b562b44635a10c08c90f87035d19565657990f0
+    size: 877052
+    url: https://github.com/purescript/purescript/archive/v0.15.13.tar.gz
+    version: 0.15.13
   original:
-    url: https://github.com/purescript/purescript/archive/v0.15.9.tar.gz
+    url: https://github.com/purescript/purescript/archive/v0.15.13.tar.gz
 - completed:
     hackage: process-1.6.13.1@sha256:1fc2173110c0bf3274b1710c75af3f70ef6c90edafa56de7160992dec4ad4608,2845
     pantry-tree:
-      size: 1543
       sha256: 3eda8fd49887605c021ad0b6264fce21dde44250d639d81e6150d8a373e1feb2
+      size: 1543
   original:
     hackage: process-1.6.13.1
 - completed:
     hackage: Cabal-3.6.3.0@sha256:ff97c442b0c679c1c9876acd15f73ac4f602b973c45bde42b43ec28265ee48f4,12459
     pantry-tree:
-      size: 19757
       sha256: b250a53bdb56844f047a2927833bb565b936a289abfa85dfc2a63148d776368a
+      size: 19757
   original:
     hackage: Cabal-3.6.3.0
 - completed:
     hackage: protolude-0.3.1@sha256:1cc9e5a5c26c33a43c52b554443dd9779fef13974eaa0beec7ca6d2551b400da,2647
     pantry-tree:
-      size: 1645
       sha256: 6452a6ca8d395f7d810139779bb0fd16fc1dbb00f1862630bc08ef5a100430f9
+      size: 1645
   original:
     hackage: protolude-0.3.1
 - completed:
     hackage: hspec-2.10.9@sha256:6000b21e29175be7cf6625399603772650abd3d9c47e722faa930dd5e9836bba,1714
     pantry-tree:
-      size: 583
       sha256: 9771ad23bc54e3339706842b3e00890d722dcd66559eed4dcd253f526141c55b
+      size: 583
   original:
     hackage: hspec-2.10.9
 - completed:
     hackage: hspec-core-2.10.9@sha256:bb2df616e8fc5324a73a621b6eb6461edfad9a9fe39db80927a4cd70cda48437,6670
     pantry-tree:
-      size: 6070
       sha256: 9b26f1cb9aa57c4381e587f87e5cc8d7f0d17e7d0adea7a5581ed8c72c16da46
+      size: 6070
   original:
     hackage: hspec-core-2.10.9
 - completed:
     hackage: hspec-discover-2.10.9@sha256:e54f978b1bcb3d0fd3a78eccf360b0731184290a1387d431531217db68f55fc4,2169
     pantry-tree:
-      size: 828
       sha256: 2650803ddd66d6032ab03a4871a8879feb5787c7e49db43463743f7c06df3a58
+      size: 828
   original:
     hackage: hspec-discover-2.10.9
 snapshots:
 - completed:
+    sha256: c11fcbeb1aa12761044755b1109d16952ede2cb6147ebde777dd5cb38f784501
     size: 649333
     url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/20/9.yaml
-    sha256: c11fcbeb1aa12761044755b1109d16952ede2cb6147ebde777dd5cb38f784501
   original: lts-20.9
