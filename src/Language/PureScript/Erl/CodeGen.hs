@@ -146,11 +146,11 @@ buildCodegenEnvironment env = CodegenEnvironment env explicitArities
 
         go n = \case
           ConstrainedType _ _ ty -> go (n + 1) ty
-          ForAll _ _ _ ty _ -> go n ty
+          ForAll _ _ _ _ ty _ -> go n ty
           other -> (n, go' other)
         go' = \case
           TypeApp _ (TypeApp _ fn _) ty | fn == E.tyFunction -> 1 + go' ty
-          ForAll _ _ _ ty _ -> go' ty
+          ForAll _ _ _ _ ty _ -> go' ty
           _ -> 0
 
     explicitArities :: M.Map (Qualified Ident) FnArity
@@ -191,12 +191,12 @@ findArities mn decls (CodegenEnvironment _ explicitArities) foreignExports = Ari
       let (f, args) = unApp e []
           apps' = foldr findUsages' apps args
         in case f of
-            Var (_, _, _, Just IsNewtype) _ -> apps'
+            Var (_, _, Just IsNewtype) _ -> apps'
             -- This is an app but we inline these
-            Var (_, _, _, Just (IsConstructor _ fields)) (Qualified _ _)
+            Var (_, _, Just (IsConstructor _ fields)) (Qualified _ _)
               | length args == length fields ->
                 apps'
-            Var (_, _, _, Just IsTypeClassConstructor) _ ->
+            Var (_, _, Just IsTypeClassConstructor) _ ->
               apps'
             -- Don't count fully saturated foreign import call, it will be called directly
             Var _ _
@@ -215,7 +215,7 @@ findArities mn decls (CodegenEnvironment _ explicitArities) foreignExports = Ari
             M.insertWith Set.union (Qualified (P.ByModuleName mn) ident) (Set.singleton 0) apps
         _ -> apps
     Accessor _ _ e -> findUsages' e apps
-    ObjectUpdate _ e es -> findUsages' e $ foldr (findUsages' . snd) apps es
+    ObjectUpdate _ e _ es -> findUsages' e $ foldr (findUsages' . snd) apps es
     Abs _ _ e -> findUsages' e apps
     Case _ e es -> foldr findUsages' (foldr findUsagesCase apps es) e
     Let _ b e' ->
@@ -473,8 +473,8 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
 
 
     topNonRecToErl :: Bool -> Ann -> Ident -> Expr Ann -> m ([(Atom, Int)], [Erl], ETypeEnv)
-    topNonRecToErl inLazyRecGroup (ss, _, _, _) ident val = do
-      let eann@(_, _, _, meta') = extractAnn val
+    topNonRecToErl inLazyRecGroup (ss, _, _) ident val = do
+      let eann@(_, _, meta') = extractAnn val
           ident' = case meta' of
             Just IsTypeClassConstructor -> identToTypeclassCtor ident
             _ -> Atom Nothing $ runIdent' ident
@@ -648,12 +648,12 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
     valueToErl = valueToErl' Nothing
 
     valueToErl' :: Maybe Ident -> Expr Ann -> m Erl
-    valueToErl' _ (Literal (pos, _, _, _) l) =
+    valueToErl' _ (Literal (pos, _, _) l) =
       rethrowWithPosition pos $ literalToValueErl l
     valueToErl' _ (Var _ (Qualified (P.ByModuleName C.M_Prim) (Ident undef)))
       | undef == C.S_undefined =
         return $ EAtomLiteral $ Atom Nothing C.S_undefined
-    valueToErl' _ (Var (_, _, _, Just (IsConstructor _ [])) (Qualified _ ident)) =
+    valueToErl' _ (Var (_, _, Just (IsConstructor _ [])) (Qualified _ ident)) =
       return $ constructorLiteral (runIdent' ident) []
     valueToErl' _ (Var _ ident) | isTopLevelBinding ident = pure $
       case M.lookup ident arities of
@@ -681,23 +681,23 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
     valueToErl' _ (Accessor _ prop val) = do
       eval <- valueToErl val
       return $ EApp RegularApp (EAtomLiteral $ Atom (Just "maps") "get") [EAtomLiteral $ AtomPS Nothing prop, eval]
-    valueToErl' _ (ObjectUpdate _ o ps) = do
+    valueToErl' _ (ObjectUpdate _ o _ ps) = do
       obj <- valueToErl o
       sts <- mapM (sndM valueToErl) ps
       return $ EMapUpdate obj (map (first (AtomPS Nothing)) sts)
-    valueToErl' _ e@(App (_, _, _, meta) _ _) = do
+    valueToErl' _ e@(App (_, _, meta) _ _) = do
       let (f, args) = unApp e []
           eMeta = case meta of
                           Just IsSyntheticApp -> SyntheticApp
                           _ -> RegularApp
       args' <- mapM valueToErl args
       case f of
-        Var (_, _, _, Just IsNewtype) _ ->
+        Var (_, _, Just IsNewtype) _ ->
           return $ head args'
-        Var (_, _, _, Just (IsConstructor _ fields)) (Qualified _ ident)
+        Var (_, _, Just (IsConstructor _ fields)) (Qualified _ ident)
           | length args == length fields ->
             return $ constructorLiteral (runIdent' ident) args'
-        Var (_, _, _, Just IsTypeClassConstructor) name -> do
+        Var (_, _, Just IsTypeClassConstructor) name -> do
           let res = curriedApp args' $ EApp eMeta (EAtomLiteral $ qualifiedToTypeclassCtor name) []
 
               replaceQualifiedSelfCalls = \case
@@ -735,7 +735,7 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
       -- TODO:  variables rather than creating temporary scope just for this
       -- TODO: This scope doesn't really work probably if we actually want to shadow parent scope (avoiding siblings is fine)
       return $ iife (ds' ++ [ret])
-    valueToErl' _ (Constructor (_, _, _, Just IsNewtype) _ _ _) = error "newtype ctor"
+    valueToErl' _ (Constructor (_, _, Just IsNewtype) _ _ _) = error "newtype ctor"
     valueToErl' _ (Constructor _ _ (ProperName ctor) fields) =
       let createFn =
             let body = constructorLiteral ctor ((EVar . identToVar) `map` fields)
@@ -778,7 +778,7 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
         else pure ()
       res <- mapM (caseAlternativeToErl maxBinders) cases
       let arrayVars = map fst $ concatMap (\(_, _, x) -> x) res
-          
+
           extendBinders (count, binds) (_, binders, arrayMatches) =
             (count + length arrayMatches, binds ++ map go binders)
             where
@@ -786,7 +786,7 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
 
           padBinds n binds = replicate n (EVar "_") ++ map snd binds ++ replicate (length arrayVars - n - length binds) (EVar "_")
           binders' = snd $ foldl extendBinders (0, []) res
-      
+
           funBinderToBinder = \case
             (EFunBinder [e] Nothing, ee) -> (EBinder e, ee)
             (EFunBinder [e] (Just g), ee) -> (EGuardedBinder e g, ee)
@@ -801,7 +801,7 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
           extendGuards (count, acc) (exprs, _, arrayMatches) = (count + length arrayMatches, acc ++ map go exprs)
             where
             go (EVarBind var (EApp RegularApp (EFunFull (Just "Guard") binders) vals))
-              | length arrayVars > 0 = 
+              | length arrayVars > 0 =
                 (EVarBind var (EApp RegularApp
                   (EFunFull (Just "Guard") ( extendGuardBinder <$> binders ))
                   (vals ++ map fst arrayMatches)
@@ -812,11 +812,11 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
       pure $ case map (\(x, _, _) -> x) res of
         exprGroups | any (\g -> length g > 0) exprGroups -> EBlock (snd (foldl extendGuards (0, []) res) ++ [ret])
         _ -> ret
-      
+
       where
         caseAlternativeToErl :: Int -> CaseAlternative Ann -> m ([Erl], [(EFunBinder, Erl)], [(Erl, Erl)])
         caseAlternativeToErl numBinders (CaseAlternative binders alt) = do
-          let binders' = binders ++ replicate (numBinders - length binders) (NullBinder (nullSourceSpan, [], Nothing, Nothing))
+          let binders' = binders ++ replicate (numBinders - length binders) (NullBinder (nullSourceSpan, [], Nothing))
               vars = nub $ concatMap binderVars binders'
 
           newVars <- map Ident <$> replicateM (length vars) freshNameErl
@@ -827,7 +827,7 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
           let (_, replaceExpVars, replaceBinderVars) = everywhereOnValues id (replaceEVars (zip vars newVars)) (replaceBVars (zip vars newVars))
 
           let binders'' = map replaceBinderVars binders'
-              alt' = case replaceExpVars (Case (nullSourceSpan, [], Nothing, Nothing) [] [CaseAlternative [] alt]) of
+              alt' = case replaceExpVars (Case (nullSourceSpan, [], Nothing) [] [CaseAlternative [] alt]) of
                         Case _ [] [CaseAlternative [] alt'] -> alt'
                         _ -> internalError "Replacing variables should give the same form back"
 
@@ -903,7 +903,7 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
       let arr = EListLiteral (map fst args')
       pure (EVar x, (EVarBind var . cas, (var, arr)) : concatMap snd args')
     binderToErl (LiteralBinder _ lit) = literalToValueErl' EMapPattern binderToErl lit
-    binderToErl (ConstructorBinder (_, _, _, Just IsNewtype) _ _ [b]) = binderToErl b
+    binderToErl (ConstructorBinder (_, _, Just IsNewtype) _ _ [b]) = binderToErl b
     binderToErl (ConstructorBinder _ _ (Qualified _ (ProperName ctorName)) binders) = do
         args' <- mapM binderToErl binders
         pure (constructorLiteral ctorName (map fst args'), concatMap snd args')
@@ -932,7 +932,7 @@ moduleToErl' cgEnv@(CodegenEnvironment env explicitArities) (Module _ _ mn _ _ d
               _ -> pure lit
           Constructor {} -> pure expr
           Accessor ann ps ex -> Accessor ann ps <$> go ex
-          ObjectUpdate ann e updates -> ObjectUpdate ann <$> go e <*> traverse (traverse go) updates
+          ObjectUpdate ann e copy updates -> ObjectUpdate ann <$> go e <*> pure copy <*> traverse (traverse go) updates
           Abs ann ident e -> do
             (ident', scope', vars') <- bindIdent scope vars ident
             Abs ann ident' <$> ensureFreshVars scope' vars' e

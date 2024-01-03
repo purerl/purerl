@@ -78,7 +78,7 @@ translateType env = flip runState Map.empty . go
           trace ("Shouldn't find random type in row list: " <> show t) $ pure Nothing
     --
     (KindApp _ ty _) -> go ty
-    (ForAll _ _ _ ty _) -> go ty
+    (ForAll _ _ _ _ ty _) -> go ty
     (ConstrainedType _ _ ty) -> TFun [TAny] <$> go ty
     ty
       | Just (_, fnTypes) <- uncurriedFnTypes EM.dataFunctionUncurried "Fn" ty,
@@ -171,7 +171,7 @@ collectTypeApp = go []
   where
     go acc (TypeConstructor _ tc) = Just (tc, acc)
     go acc (TypeApp _ t1 t2) = go (t2 : acc) t1
-    go acc (ForAll _ _ _ ty _) = go acc ty
+    go acc (ForAll _ _ _ _ ty _) = go acc ty
     go _ _ = Nothing
 
 

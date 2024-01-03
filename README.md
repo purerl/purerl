@@ -2,7 +2,7 @@
 
 # Overview
 
-PureScript is a small strongly typed programming language with expressive types, written in and inspired by Haskell; purerl is a PureScript backend targetting Erlang source. 
+PureScript is a small strongly typed programming language with expressive types, written in and inspired by Haskell; purerl is a PureScript backend targetting Erlang source.
 
 # Resources
 
@@ -19,6 +19,8 @@ Currently the `purerl` executable should correspond to `purs` compiler versions 
 
 | `purerl` version | `purs` version |
 | --- |  --- |
+| 0.0.22 | 0.15.14 |
+| 0.0.20-0.0.21 | 0.15.9 |
 | 0.0.19 | 0.15.7 |
 | 0.0.17-0.0.18 | 0.15.3 |
 | 0.0.14-0.0.16 | 0.14.5 |
@@ -53,7 +55,7 @@ let upstream =
       https://github.com/purerl/package-sets/releases/download/erl-0.14.4-20211012-1/packages.dhall
 ```
 
-Then 
+Then
 
 * `spago build` will build the project through to `.erl`
 * `spago run` will run the project from a given entry point
@@ -95,8 +97,8 @@ The compiler knows of primitive types and the corresponding Erlang types, and so
 | Tagged union | Tuple with tag element | e.g. `Some 42` is `{some, 42}` |
 | Newtype | as underlying type |
 | Functions | Function (arity 1 - but see FFI) |
-| `Data.Function.Uncurried.FnX` | Function (arity `X`) | Actual higher arity functions - for 'uncurried' functions from tuples see `Erl.Data.Tuple`  | 
-| `Effect.Uncurried.EffectFnX` | Function (arity `X`) | Actual higher arity functions (with effectful behaviour) | 
+| `Data.Function.Uncurried.FnX` | Function (arity `X`) | Actual higher arity functions - for 'uncurried' functions from tuples see `Erl.Data.Tuple`  |
+| `Effect.Uncurried.EffectFnX` | Function (arity `X`) | Actual higher arity functions (with effectful behaviour) |
 | `Erl.Data.List`  | `list()`| Native lists via  `purescript-erl-lists` |
 | `Erl.Data.Tuple` | `tuple()` | Native tuples via `purescript-erl-tuples` |
 | `Erl.Data.Map` | `#{tkey() => tvalue()}` | Map with homogenous key/value types |
@@ -108,7 +110,7 @@ Top level declarations are uniformly output as nullary functions, where argument
 
 There is special handling of values of the following types at the top level:
 
-* `Data.Function.Uncurried.FnX` 
+* `Data.Function.Uncurried.FnX`
 * `Data.Function.Uncurried.EffectFnX`
 
 These will generate code as for an `X` arity function, i.e. an arity `X` overload will be generated directly, being suitable for usage in callback module implementations, allowing for code replacement, etc.
@@ -128,7 +130,7 @@ Erlang module: `foo_myModule@foreign`
 
 Note that the FFI code for a module must not only be in a file named correctly, but the module must be named the same as the output module with `@foreign` appended (so *not* following the Erlang module naming requirement until this gets copied to output).
 
-FFI files *MUST* export explicitly the exact set of identifiers which will be imported by the corresponding PureScript file. The compiler will check these exports and use them to inform codegen.  
+FFI files *MUST* export explicitly the exact set of identifiers which will be imported by the corresponding PureScript file. The compiler will check these exports and use them to inform codegen.
 
 *Auto-currying*: functions can be defined with any arity. According to the arity of the export (parsed from the export list) the compiler will automatically apply to the right number of arguments. By extension, values are exported as a function of arity 0 returning that value.
 
@@ -193,7 +195,7 @@ f() -> foo_bar@ps:appendNumber(<<"hello">>, 42).
 
 ```
 
-These overloads should be generated at least for exported functions. 
+These overloads should be generated at least for exported functions.
 
 Note that functions with type class constraints should not be called from outside of PureScript, similar to the guidelines for FFI functions.
 
