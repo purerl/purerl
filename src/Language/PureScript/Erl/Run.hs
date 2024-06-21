@@ -22,8 +22,9 @@ import           System.Exit (exitFailure, ExitCode(..))
 import           System.FilePath.Glob (glob)
 import           Data.Traversable (for)
 import           Language.PureScript.Erl.Make.Monad (catchDoesNotExist)
-import           System.Directory (getModificationTime)
+import           System.Directory (getModificationTime, createDirectoryIfMissing)
 import           System.FilePath as FilePath
+import           Debug.Trace (traceM)
 
 compileBeam :: Bool -> FilePath -> [ FilePath ] -> IO ()
 compileBeam noisy ebin files = do
@@ -44,8 +45,9 @@ runProgram runModule =
   case nameFromString runModule of
     Just (P.Qualified (P.ByModuleName mn') ident) -> do
       let erlName = runAtom $ Atom (Just $ atomModuleName mn' PureScriptModule) (P.runIdent ident)
-      readProcessWithExitCode "mkdir" ["-p", "ebin"] [] >>=
-        exitOnFailure "Couldn't create ebin directory"
+
+      createDirectoryIfMissing False "./ebin"
+
       files <- glob "output/*/*.erl"
       when (files == []) $ do
         hPutStrLn stderr "Didn't find any .erl files in output directory"
