@@ -170,6 +170,7 @@ nameIsErlReserved :: Text -> Bool
 nameIsErlReserved name =
   name `elem` erlAnyReserved
 
+-- https://www.erlang.org/docs/28/system/reference_manual.html#reserved-words
 erlAnyReserved :: [Text]
 erlAnyReserved = [
   "after",
@@ -186,10 +187,12 @@ erlAnyReserved = [
   "catch",
   "cond",
   "div",
+  "else",
   "end",
   "fun",
   "if",
   "let",
+  "maybe",
   "not",
   "of",
   "or",
