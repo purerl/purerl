@@ -98,11 +98,22 @@ jobs:
         if: "${{ env.CI_RELEASE == 'true' }}"
         run: |
           os_name="${{ runner.os }}"
+          os_arch="${{ runner.arch }}"
           case "$os_name" in
             Linux)
-              bundle_os=linux64;;
+              case "$os_arch" in
+                ARM64)
+                  bundle_os=linux-arm64;;
+                *)
+                  bundle_os=linux64;;
+              esac;;
             macOS)
-              bundle_os=macos;;
+              case "$os_arch" in
+                ARM64)
+                  bundle_os=macos-arm64;;
+                *)
+                  bundle_os=macos;;
+              esac;;
             Windows)
               bundle_os=win64;;
             *)
