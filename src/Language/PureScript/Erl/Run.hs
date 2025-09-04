@@ -24,7 +24,6 @@ import           Data.Traversable (for)
 import           Language.PureScript.Erl.Make.Monad (catchDoesNotExist)
 import           System.Directory (getModificationTime, createDirectoryIfMissing)
 import           System.FilePath as FilePath
-import           Debug.Trace (traceM)
 
 compileBeam :: Bool -> FilePath -> [ FilePath ] -> IO ()
 compileBeam noisy ebin files = do
