@@ -25,7 +25,8 @@ jobs:
         - os: ["ubuntu-latest"]
           image: haskell:9.2.5@sha256:2597b0e2458165a6635906204f7fac43c22e7d2a46aca1235a811194bb6cd419
         - os: ["macOS-11"]
-        - os: "windows-2019"
+        - os: "macos-15"
+        - os: "windows-2025"
 
     runs-on: "${{ matrix.os }}"
     container: "${{ matrix.image }}"
@@ -61,7 +62,7 @@ jobs:
           [ "$(stack --numeric-version)" = "$STACK_VERSION" ]
           chown root:root .
 
-      - uses: "actions/cache@v2"
+      - uses: "actions/cache@v4"
         with:
           path: |
             /root/.stack
