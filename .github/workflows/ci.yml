@@ -84,8 +84,8 @@ jobs:
         if: "${{ env.CI_RELEASE == 'true' }}"
         run: |
           actual_version=$(grep version: package.yaml  | awk '{ gsub(/"/, "", $2); print $2 }')
-          [ "v${actual_version}" = "${{ github.event.release.tag_name }}" ]
           echo "Version is $actual_version, tag is ${{ github.event.release.tag_name }}"
+          [ "v${actual_version}" = "${{ github.event.release.tag_name }}" ]
 
       # - run: "ci/run-hlint.sh --git"
       #   env:
