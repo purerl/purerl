@@ -24,6 +24,8 @@ jobs:
         include:
         - os: ["ubuntu-latest"]
           image: haskell:9.2.5@sha256:2597b0e2458165a6635906204f7fac43c22e7d2a46aca1235a811194bb6cd419
+        - os: "ubuntu-24.04-arm"
+          image: haskell:9.2.5@sha256:2597b0e2458165a6635906204f7fac43c22e7d2a46aca1235a811194bb6cd419
         - os: "macos-13"  # x64
         - os: "macos-15"
         - os: "windows-2025"
