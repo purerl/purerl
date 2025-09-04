@@ -24,8 +24,9 @@ jobs:
         include:
         - os: ["ubuntu-latest"]
           image: haskell:9.2.5@sha256:2597b0e2458165a6635906204f7fac43c22e7d2a46aca1235a811194bb6cd419
-        - os: ["macOS-11"]
-        - os: "windows-2019"
+        - os: "macos-13"  # x64
+        - os: "macos-15"
+        - os: "windows-2025"
 
     runs-on: "${{ matrix.os }}"
     container: "${{ matrix.image }}"
@@ -38,13 +39,15 @@ jobs:
         run: |
           . /etc/os-release
           echo deb http://deb.debian.org/debian "$VERSION_CODENAME"-backports main >> /etc/apt/sources.list
+          # buster is old
+          sed -i 's/deb.debian.org/archive.debian.org/g' /etc/apt/sources.list
           apt-get update && apt-get install -y git/"$VERSION_CODENAME"-backports
 
       - uses: "actions/checkout@v2"
 
       - uses: "actions/setup-node@v1"
         with:
-          node-version: "14"
+          node-version: "22"
 
       - id: "haskell"
         name: "(Non-Linux only) Install Haskell"
@@ -61,7 +64,7 @@ jobs:
           [ "$(stack --numeric-version)" = "$STACK_VERSION" ]
           chown root:root .
 
-      - uses: "actions/cache@v2"
+      - uses: "actions/cache@v4"
         with:
           path: |
             /root/.stack
