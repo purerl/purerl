@@ -38,7 +38,9 @@ jobs:
         if: "${{ runner.os == 'Linux' }}"
         run: |
           . /etc/os-release
-          echo deb http://deb.debian.org/debian "$VERSION_CODENAME"-backports main >> /etc/apt/sources.list
+          # buster is old
+          # echo deb http://deb.debian.org/debian "$VERSION_CODENAME"-backports main >> /etc/apt/sources.list
+          echo deb http://archive.debian.org/debian buster-backports main >> /etc/apt/sources.list
           apt-get update && apt-get install -y git/"$VERSION_CODENAME"-backports
 
       - uses: "actions/checkout@v2"
