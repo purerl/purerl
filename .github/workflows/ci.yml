@@ -24,7 +24,7 @@ jobs:
         include:
         - os: ["ubuntu-latest"]
           image: haskell:9.2.5@sha256:2597b0e2458165a6635906204f7fac43c22e7d2a46aca1235a811194bb6cd419
-        - os: ["macOS-11"]
+        - os: "macos-15-large"  # x64
         - os: "macos-15"
         - os: "windows-2025"
 
@@ -45,7 +45,7 @@ jobs:
 
       - uses: "actions/setup-node@v1"
         with:
-          node-version: "14"
+          node-version: "22"
 
       - id: "haskell"
         name: "(Non-Linux only) Install Haskell"
