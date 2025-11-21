@@ -155,7 +155,7 @@ data Binary
 
 data Unary = Unary (Text, PSString) (Text, PSString) UnaryOperator
 
-inlineCommonFnsM :: forall m. (Monad m, MonadSupply m) => (Erl -> Erl) -> Erl -> m Erl
+inlineCommonFnsM :: forall m. MonadSupply m => (Erl -> Erl) -> Erl -> m Erl
 inlineCommonFnsM _expander =
   everywhereOnErlTopDownM $
     applyAllM
@@ -455,7 +455,7 @@ ringInt = (EC.dataRing, snd $ C.P_ringInt)
 euclideanRingNumber :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
 euclideanRingNumber = (EC.dataEuclideanRing, snd $ C.P_euclideanRingNumber)
 
-euclideanRingInt :: forall a b. (IsString a, IsString b, Eq b) => (a, b)
+euclideanRingInt :: forall a b. (IsString a, IsString b) => (a, b)
 euclideanRingInt = (EC.dataEuclideanRing, EC.euclideanRingInt)
 
 eqNumber :: forall a b. (IsString a, IsString b, Eq b) => (a, b)

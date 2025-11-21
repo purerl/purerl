@@ -249,7 +249,7 @@ findArities mn decls (CodegenEnvironment _ explicitArities) foreignExports = Ari
 -- module.
 moduleToErl ::
   forall m.
-  (Monad m, MonadReader Options m, MonadSupply m, MonadError MultipleErrors m, MonadWriter MultipleErrors m) =>
+  (MonadReader Options m, MonadSupply m, MonadError MultipleErrors m, MonadWriter MultipleErrors m) =>
   CodegenEnvironment ->
   Module Ann ->
   [(T.Text, Int)] ->
@@ -306,7 +306,7 @@ moduleToErl codegenEnv m@(Module _ _ mn _ _ _ _ _ _) foreignExports =
 
 moduleToErl' ::
   forall m.
-  (Monad m, MonadReader Options m, MonadSupply m, MonadError MultipleErrors m, MonadWriter (MultipleErrors, Any) m) =>
+  (MonadReader Options m, MonadSupply m, MonadError MultipleErrors m, MonadWriter (MultipleErrors, Any) m) =>
   CodegenEnvironment ->
   Module Ann ->
   [(T.Text, Int)] ->
