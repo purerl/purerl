@@ -38,7 +38,6 @@ dependencies:
   - monad-control
   - mtl
   - parsec
-  - pattern-arrows
   - process
   - protolude
   - purescript
@@ -55,7 +54,7 @@ dependencies:
   - vector
   - witherable
 build-tools:
-  - happy:happy ==1.20.0
+  - happy:happy ==2.0.2
 
 library:
   source-dirs: src

@@ -10,6 +10,7 @@ import Prelude.Compat
 
 import Data.Text (Text)
 
+import Control.Monad
 import Control.Monad.Identity
 import Control.Arrow (second)
 

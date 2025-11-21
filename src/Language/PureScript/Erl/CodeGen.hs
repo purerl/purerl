@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -Wno-name-shadowing #-}
+{-# OPTIONS_GHC -Wno-name-shadowing -Wno-error=x-partial #-}
 
 -- |
 -- This module generates code in the simplified Erlang intermediate representation from Purescript code
@@ -16,13 +16,14 @@ import Control.Monad (foldM, replicateM, unless)
 import Control.Monad.Error.Class (MonadError (..))
 import Control.Monad.Reader (MonadReader (..))
 import Control.Monad.Supply.Class (MonadSupply (fresh))
-import Control.Monad.Writer (MonadWriter (..), Any (Any), WriterT (runWriterT))
+import Control.Monad.Writer (MonadWriter (..), WriterT (runWriterT))
 import Data.Either (fromRight)
 import Data.Foldable (find, traverse_, foldl')
 import Data.List (nub)
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe (catMaybes, fromMaybe, mapMaybe)
+import Data.Monoid (Any(Any))
 import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Text as T
