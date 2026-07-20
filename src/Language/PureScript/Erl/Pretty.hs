@@ -6,6 +6,7 @@ import Prelude ()
 import Prelude.Compat
 
 import Control.Arrow ((<+>))
+import Control.Monad (mzero, forM)
 import Control.Monad.State hiding (sequence)
 import Control.PatternArrows
 import qualified Control.Arrow as A
