@@ -4,6 +4,10 @@
 
 PureScript is a small strongly typed programming language with expressive types, written in and inspired by Haskell; purerl is a PureScript backend targetting Erlang source.
 
+## Notice
+
+This is the "original" purerl, but the generated code is sub-par compared to the newer [https://github.com/id3as/purescript-backend-erl](purescript-backend-erl), and with the addition of incremental compilation support the use of `purerl` directly can't be recommended. The ecosystem & FFI specification remains the same, so the below information remains correct, but for production use backend-erl is a better choice.
+
 # Resources
 
 - [PureScript discord](https://discord.gg/jNh7FxhcAj) channel `#purerl` - general discussion, support, news
