@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-error=x-partial #-}
 module Language.PureScript.Erl.CodeGen.Types where
 
 import Prelude

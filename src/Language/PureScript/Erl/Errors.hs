@@ -9,11 +9,9 @@ import Protolude (ordNub)
 
 import           Control.Arrow ((&&&))
 import           Control.Monad.Error.Class (MonadError(..))
+import           Control.Monad (unless, forM)
 import Control.Monad.Writer
-    ( unless,
-      forM,
-      Last(Last, getLast),
-      censor,
+    ( censor,
       MonadWriter(tell, listen) )
 import           Control.Exception (displayException)
 import           Control.Lens (both, head1, over)
@@ -29,6 +27,7 @@ import qualified Data.List.NonEmpty as NEL
 import           Data.List.NonEmpty (NonEmpty((:|)))
 import           Data.Maybe (fromMaybe, mapMaybe, isJust)
 import qualified Data.Map as M
+import           Data.Monoid (Last(Last, getLast))
 import           Data.Ord (Down(..))
 import qualified Data.Text as T
 import           Data.Text (Text)
@@ -702,23 +701,25 @@ prettyPrintParseError = prettyPrintParseErrorMessages "or" "unknown parse error"
 -- Adapted from 'Text.Parsec.Error.showErrorMessages'.
 -- See <https://github.com/aslatter/parsec/blob/v3.1.9/Text/Parsec/Error.hs#L173>.
 prettyPrintParseErrorMessages :: String -> String -> String -> String -> String -> [Message] -> Box.Box
-prettyPrintParseErrorMessages msgOr msgUnknown msgExpecting msgUnExpected msgEndOfInput msgs
-  | null msgs = Box.text msgUnknown
-  | otherwise = Box.vcat Box.left $ map Box.text $ clean [showSysUnExpect,showUnExpect,showExpect,showMessages]
-
+prettyPrintParseErrorMessages _ msgUnknown _ _ _ (NEL.nonEmpty -> Nothing) =
+  Box.text msgUnknown
+prettyPrintParseErrorMessages msgOr _ msgExpecting msgUnExpected msgEndOfInput (NEL.nonEmpty -> Just msgs) =
+  Box.vcat Box.left $ map Box.text $ clean [showSysUnExpect,showUnExpect,showExpect,showMessages]
   where
-  (sysUnExpect,msgs1) = span (SysUnExpect "" ==) msgs
+  (sysUnExpect,msgs1) = NEL.span (SysUnExpect "" ==) msgs
   (unExpect,msgs2)    = span (UnExpect    "" ==) msgs1
   (expect,messages)   = span (Expect      "" ==) msgs2
 
   showExpect      = showMany msgExpecting expect
   showUnExpect    = showMany msgUnExpected unExpect
-  showSysUnExpect | not (null unExpect) ||
-                    null sysUnExpect = ""
-                  | null firstMsg    = msgUnExpected ++ " " ++ msgEndOfInput
-                  | otherwise        = msgUnExpected ++ " " ++ firstMsg
-    where
-    firstMsg  = PE.messageString (head sysUnExpect)
+  showSysUnExpect | not (null unExpect) = ""
+                  | otherwise =
+                      case NEL.nonEmpty sysUnExpect of
+                        Nothing -> ""
+                        Just (firstMsg :| _rest) ->
+                          case PE.messageString firstMsg of
+                            [] ->  msgUnExpected ++ " " ++ msgEndOfInput
+                            nonEmptyMsg -> msgUnExpected ++ " " ++ nonEmptyMsg
 
   showMessages      = showMany "" messages
 

@@ -14,7 +14,7 @@ data Path
   | PathRoot T.Text Int T.Text
   deriving (Show)
 
-typecheckWrapper :: forall m. (Monad m, MonadSupply m) => ModuleName -> Erl -> m [Erl]
+typecheckWrapper :: forall m. MonadSupply m => ModuleName -> Erl -> m [Erl]
 typecheckWrapper mn =
   \case
     EFunctionDef (Just (TFun [] _)) _ _ [] _ ->
