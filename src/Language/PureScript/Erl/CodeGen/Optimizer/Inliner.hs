@@ -395,7 +395,7 @@ binaryOperators =
   Map.fromList $
     conv
       <$> ( [ Binary euclideanRingNumber opDiv FDivide,
-              Binary euclideanRingInt opDiv IDivide,
+              -- [drathier]: Purescript euclidian integer division is not the same division as erlang division, so we can't inline it as `div` here. See data_euclideanRing@foreign:intDiv and https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/divmodnote-letter.pdf for the various kinds of division.
               Binary heytingAlgebraBoolean opConj AndAlso,
               Binary heytingAlgebraBoolean opDisj OrElse,
               Binary semigroupList opAppend ListConcat
