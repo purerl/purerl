@@ -6,7 +6,7 @@ PureScript is a small strongly typed programming language with expressive types,
 
 ## Notice
 
-This is the "original" purerl, but the generated code is sub-par compared to the newer [https://github.com/id3as/purescript-backend-erl](purescript-backend-erl), and with the addition of incremental compilation support the use of `purerl` directly can't be recommended. The ecosystem & FFI specification remains the same, so the below information remains correct, but for production use backend-erl is a better choice.
+This is the "original" purerl, but the generated code is sub-par compared to the newer [purescript-backend-erl](https://github.com/id3as/purescript-backend-erl), and with the addition of incremental compilation support the use of `purerl` directly can't be recommended. The ecosystem & FFI specification remains the same, so the below information remains correct, but for production use backend-erl is a better choice.
 
 # Resources
 
